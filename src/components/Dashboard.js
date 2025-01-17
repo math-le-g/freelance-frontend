@@ -44,19 +44,19 @@ const Dashboard = () => {
 
       // Appel en parallèle à 4 endpoints
       const [totalsRes, monthlyRes, annualRes, topClientsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/dashboard/totals', {
+        axios.get(`${process.env.REACT_APP_API_URL}/api/dashboard/totals`, {
           headers: { Authorization: `Bearer ${token}` },
           params,
         }),
-        axios.get('http://localhost:5000/api/dashboard/monthly', {
+        axios.get(`${process.env.REACT_APP_API_URL}/api/dashboard/monthly`, {
           headers: { Authorization: `Bearer ${token}` },
           params,
         }),
-        axios.get('http://localhost:5000/api/dashboard/annual', {
+        axios.get(`${process.env.REACT_APP_API_URL}/api/dashboard/annual`, {
           headers: { Authorization: `Bearer ${token}` },
           params,
         }),
-        axios.get('http://localhost:5000/api/dashboard/top-clients', {
+        axios.get(`${process.env.REACT_APP_API_URL}/api/dashboard/top-clients`, {
           headers: { Authorization: `Bearer ${token}` },
           params,
         }),

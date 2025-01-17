@@ -59,7 +59,7 @@ const FactureList = () => {
         params.status = filters.status;
       }
 
-      const response = await axios.get('http://localhost:5000/api/factures', {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures`, {
         headers: { Authorization: `Bearer ${token}` },
         params,
       });
@@ -74,7 +74,7 @@ const FactureList = () => {
   const fetchClients = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const resp = await axios.get('http://localhost:5000/api/clients', {
+      const resp = await axios.get(`${process.env.REACT_APP_API_URL}/api/clients`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setClients(resp.data);
@@ -123,7 +123,7 @@ const FactureList = () => {
       toast.info('Enregistrement du paiement...', { autoClose: 1500 });
 
       await axios.post(
-        `http://localhost:5000/api/factures/${selectedInvoiceId}/paiement`,
+        `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceId}/paiement`,
         paymentData,
         {
           headers: {
@@ -147,7 +147,7 @@ const FactureList = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/factures/${facture._id}/pdf`,
+        `${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -169,7 +169,7 @@ const FactureList = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `http://localhost:5000/api/factures/${facture._id}/pdf`,
+        `${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!response.ok) throw new Error('Erreur PDF');
@@ -203,7 +203,7 @@ const FactureList = () => {
       );
       if (!confirmDelete) return;
 
-      await axios.delete(`http://localhost:5000/api/factures/${factureId}`, {
+      await axios.delete(`${process.env.REACT_APP_API_URL}/api/factures/${factureId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success('Facture supprimée');

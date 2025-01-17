@@ -26,8 +26,8 @@ const SuiviPaiements = () => {
       };
 
       const [facturesRes, statsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/factures', config),
-        axios.get('http://localhost:5000/api/factures/statistiques', config)
+        axios.get(`${process.env.REACT_APP_API_URL}/api/factures`, config),
+        axios.get(`${process.env.REACT_APP_API_URL}/api/factures/statistiques`, config)
       ]);
 
       setFactures(facturesRes.data);
@@ -52,7 +52,7 @@ const SuiviPaiements = () => {
       toast.info('Enregistrement du paiement...', { autoClose: 1500 });
 
       await axios.post(
-        `http://localhost:5000/api/factures/${selectedInvoiceId}/paiement`,
+        `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceId}/paiement`,
         paymentData,
         {
           headers: { 'Authorization': `Bearer ${token}` }

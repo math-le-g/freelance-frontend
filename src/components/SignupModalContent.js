@@ -18,7 +18,7 @@ const SignupModalContent = ({ onClose }) => {
     e.preventDefault();
     try {
       // Appel de l'API pour s'inscrire
-      const response = await axios.post('http://localhost:5000/api/auth/signup', { 
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/signup`, { 
         firstName, 
         lastName, 
         email, 

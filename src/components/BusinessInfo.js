@@ -52,7 +52,7 @@ const BusinessInfo = ({ businessInfo, setBusinessInfo }) => {
         },
       };
 
-      const response = await axios.post(`http://localhost:5000/api/business-info/`, localInfo, config);
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/business-info/`, localInfo, config);
       setBusinessInfo(response.data);
       alert('Informations de l\'entreprise sauvegardées !');
     } catch (error) {

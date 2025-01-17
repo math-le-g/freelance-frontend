@@ -6,7 +6,7 @@ export const logoutEvent = new Event('logout');
 
 // Créer une instance Axios
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000/api/', // Base URL pour toutes les requêtes
+  baseURL: `${process.env.REACT_APP_API_URL}/api/`, // Base URL pour toutes les requêtes
   headers: {
     'Content-Type': 'application/json'
   }

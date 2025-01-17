@@ -34,7 +34,7 @@ const InvoicePreview = () => {
         const [year, month] = selectedInvoiceMonth.split('-');
 
         const response = await axios.post(
-          'http://localhost:5000/api/factures/preview',
+          `${process.env.REACT_APP_API_URL}/api/factures/preview`,
           {
             clientId: selectedInvoiceClient._id,
             year: parseInt(year),

@@ -33,14 +33,14 @@ const RectifyFacturePage = () => {
         const token = localStorage.getItem('token');
 
         // 1) Récup la facture
-        const factureResp = await axios.get(`http://localhost:5000/api/factures/${id}`, {
+        const factureResp = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         setFacture(factureResp.data);
 
         // 2) Récup la liste de clients
-        const clientResp = await axios.get('http://localhost:5000/api/clients', {
+        const clientResp = await axios.get(`${process.env.REACT_APP_API_URL}/api/clients`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setClients(clientResp.data);
@@ -129,7 +129,7 @@ const RectifyFacturePage = () => {
 
       // Appel au backend
       await axios.put(
-        `http://localhost:5000/api/factures/${id}/rectify`,
+        `${process.env.REACT_APP_API_URL}/api/factures/${id}/rectify`,
         payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );

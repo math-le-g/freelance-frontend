@@ -32,12 +32,12 @@ const MesFactures = () => {
         if (statusFilter) params.status = statusFilter;
 
         // Récupérer les factures avec les filtres
-        const responseFactures = await axios.get('http://localhost:5000/api/factures', { params });
+        const responseFactures = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures`, { params });
         console.log('Factures récupérées:', responseFactures.data);
         setFactures(responseFactures.data);
 
         // Récupérer les clients pour le filtre
-        const responseClients = await axios.get('http://localhost:5000/api/clients', {
+        const responseClients = await axios.get(`${process.env.REACT_APP_API_URL}/api/clients`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         setClients(responseClients.data);
@@ -52,7 +52,7 @@ const MesFactures = () => {
 
   const handleViewPdf = async (facture) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/factures/${facture._id}/pdf`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`, {
         responseType: 'blob',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
@@ -68,7 +68,7 @@ const MesFactures = () => {
 
   const handleDownloadPdf = async (facture) => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/factures/${facture._id}/pdf`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`, {
         responseType: 'blob',
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
