@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Styles personnalisés pour les PDF */
+@layer utilities {
+    /* Masquer les contrôles PDF */
+    .pdf-viewer {
+      @apply w-full h-full border-0 select-none;
+    }
+  }
+  
+  /* Styles spécifiques pour les iframes PDF */
+  iframe[type='application/pdf'] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
