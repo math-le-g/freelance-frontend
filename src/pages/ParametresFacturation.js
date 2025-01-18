@@ -37,6 +37,7 @@ const ParametresFacturation = () => {
   const [businessInfo, setBusinessInfo] = useState({});
 
   useEffect(() => {
+
     const fetchSettings = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -45,7 +46,9 @@ const ParametresFacturation = () => {
         };
 
         // Récupérer les paramètres spécifiques
+        console.log('Envoi de la requête GET /invoice-settings');
         const settingsResponse = await axios.get('/invoice-settings', config);
+        console.log('Réponse de la requête GET /invoice-settings:', settingsResponse);
         const invoiceNumberStartValue = settingsResponse.data.invoiceNumberStart || '';
         setInvoiceTitle(settingsResponse.data.invoiceTitle || '');
         setInvoiceNumberStart(invoiceNumberStartValue);
@@ -53,11 +56,15 @@ const ParametresFacturation = () => {
         setPreviousInvoiceNumberStart(invoiceNumberStartValue);
 
         // Récupérer le dernier numéro de facture émis
+        console.log('Envoi de la requête GET /invoice-settings/last-number');
         const lastNumberResponse = await axios.get('/invoice-settings/last-number', config);
+        console.log('Réponse de la requête GET /invoice-settings/last-number:', lastNumberResponse);
         setLastInvoiceNumber(lastNumberResponse.data.lastInvoiceNumber || 0);
 
         // Récupérer les informations d'entreprise complètes
+        console.log('Envoi de la requête GET /business-info');
         const businessInfoResponse = await axios.get('/business-info', config);
+        console.log('Réponse de la requête GET /business-info:', businessInfoResponse);
         const info = businessInfoResponse.data || {};
         setBusinessInfo(info);
 

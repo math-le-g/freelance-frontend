@@ -28,7 +28,7 @@ const AddClient = ({ addClient, setIsModalOpen }) => {
     };
 
     try {
-      const response = await axios.post(`${process.env.process.env.REACT_APP_API_URL}/api/clients`, newClient, config);
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/clients`, newClient, config);
       addClient(response.data);
 
       // Réinitialiser le formulaire après soumission
