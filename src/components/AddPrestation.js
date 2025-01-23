@@ -1,5 +1,3 @@
-// frontend/src/components/AddPrestation.js
-
 import React, { useState, useEffect } from 'react';
 import DescriptionSelect from './DescriptionSelect';
 import { toast } from 'react-toastify';
