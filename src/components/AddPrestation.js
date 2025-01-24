@@ -4,12 +4,12 @@ import { toast } from 'react-toastify';
 import { usePrestation } from '../contexts/PrestationContext';
 import { useInvoice } from '../contexts/InvoiceContext';
 
-// convertit (heures,minutes) => total minutes
+// Convertit (heures, minutes) => total minutes
 function hmToMinutes(h, m) {
   return (parseInt(h, 10) || 0) * 60 + (parseInt(m, 10) || 0);
 }
 
-// convertit la durée selon l'unité
+// Convertit la durée selon l'unité
 function convertDurationToMinutes(unit, input1, input2) {
   switch (unit) {
     case 'minutes':
@@ -40,6 +40,7 @@ const AddPrestation = ({
 
   // "hourly"
   const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState(''); // Nouveau champ pour les minutes
   const [hourlyRate, setHourlyRate] = useState('');
 
   // "fixed" & "daily"
@@ -57,11 +58,11 @@ const AddPrestation = ({
       setSelectedDescription(
         initialData.description
           ? {
-              value: initialData.description,
-              label:
-                initialData.description.charAt(0).toUpperCase() +
-                initialData.description.slice(1),
-            }
+            value: initialData.description,
+            label:
+              initialData.description.charAt(0).toUpperCase() +
+              initialData.description.slice(1),
+          }
           : null
       );
       setBillingType(initialData.billingType || 'hourly');
@@ -86,12 +87,21 @@ const AddPrestation = ({
         setDurationInput1(String(nbDays));
         setDurationInput2('');
       }
+
+      // Si le type de facturation est "hourly", décomposer les heures en heures et minutes
+      if (initialData.billingType === 'hourly') {
+        const h = Math.floor(initialData.hours);
+        const m = Math.round((initialData.hours - h) * 60);
+        setHours(String(h));
+        setMinutes(String(m));
+      }
     } else {
       // Reset
       setDate('');
       setSelectedDescription(null);
       setBillingType('hourly');
       setHours('');
+      setMinutes(''); // Reset des minutes
       setHourlyRate('');
       setFixedPrice('');
       setQuantity(1);
@@ -122,12 +132,25 @@ const AddPrestation = ({
     if (billingType === 'hourly') {
       // Taux horaire
       prestationData.billingType = 'hourly';
-      if (!hours || !hourlyRate || isNaN(hours) || isNaN(hourlyRate)) {
-        toast.error('Valeurs invalides pour heures / taux horaire.');
+      if (
+        (!hours && hours !== 0) ||
+        (!minutes && minutes !== 0) ||
+        !hourlyRate ||
+        isNaN(hours) ||
+        isNaN(minutes) ||
+        isNaN(hourlyRate)
+      ) {
+        toast.error('Valeurs invalides pour heures, minutes ou taux horaire.');
         return;
       }
-      prestationData.hours = parseFloat(hours);
+
+      const totalHours = parseInt(hours, 10) + parseInt(minutes, 10) / 60;
+      const totalMinutes = (parseInt(hours, 10) * 60) + parseInt(minutes, 10);
+      prestationData.hours = totalHours;
       prestationData.hourlyRate = parseFloat(hourlyRate);
+      prestationData.duration = totalMinutes;
+      prestationData.durationUnit = 'hours';
+
     } else if (billingType === 'fixed') {
       // Forfait
       prestationData.billingType = 'fixed';
@@ -180,6 +203,7 @@ const AddPrestation = ({
     setSelectedDescription(null);
     setBillingType('hourly');
     setHours('');
+    setMinutes(''); // Reset des minutes
     setHourlyRate('');
     setFixedPrice('');
     setQuantity(1);
@@ -264,11 +288,10 @@ const AddPrestation = ({
 
       {/* 1) Taux horaire */}
       <div
-        className={`transition-opacity duration-300 absolute inset-x-0 ${
-          billingType === 'hourly'
+        className={`transition-opacity duration-300 absolute inset-x-0 ${billingType === 'hourly'
             ? 'relative opacity-100'
             : 'opacity-0 pointer-events-none'
-        }`}
+          }`}
       >
         <div className="grid grid-cols-2 gap-4 mt-2 mb-4">
           <div>
@@ -279,30 +302,41 @@ const AddPrestation = ({
               onChange={(e) => setHours(e.target.value)}
               className="mt-1 w-full p-2 border border-gray-300 rounded"
               min="0"
-              step="0.1"
+              step="1"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Taux horaire (€)</label>
+            <label className="block text-sm font-medium text-gray-700">Minutes</label>
             <input
               type="number"
-              value={hourlyRate}
-              onChange={(e) => setHourlyRate(e.target.value)}
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
               className="mt-1 w-full p-2 border border-gray-300 rounded"
               min="0"
-              step="0.01"
+              max="59"
+              step="1"
             />
           </div>
+        </div>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700">Taux horaire (€)</label>
+          <input
+            type="number"
+            value={hourlyRate}
+            onChange={(e) => setHourlyRate(e.target.value)}
+            className="mt-1 w-full p-2 border border-gray-300 rounded"
+            min="0"
+            step="0.01"
+          />
         </div>
       </div>
 
       {/* 2) Forfait */}
       <div
-        className={`transition-opacity duration-300 absolute inset-x-0 ${
-          billingType === 'fixed'
+        className={`transition-opacity duration-300 absolute inset-x-0 ${billingType === 'fixed'
             ? 'relative opacity-100'
             : 'opacity-0 pointer-events-none'
-        }`}
+          }`}
       >
         <div className="grid grid-cols-2 gap-4 mt-2 mb-4">
           <div>
@@ -410,11 +444,10 @@ const AddPrestation = ({
 
       {/* 3) Journalier */}
       <div
-        className={`transition-opacity duration-300 absolute inset-x-0 ${
-          billingType === 'daily'
+        className={`transition-opacity duration-300 absolute inset-x-0 ${billingType === 'daily'
             ? 'relative opacity-100'
             : 'opacity-0 pointer-events-none'
-        }`}
+          }`}
       >
         <div className="grid grid-cols-2 gap-4 mt-2 mb-4">
           <div>

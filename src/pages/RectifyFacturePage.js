@@ -4,71 +4,92 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import Stepper from '../components/Stepper';
-
-// Renommer l'import pour éviter le conflit de nom
-import Step2View from '../components/Step2'; 
+import Step2View from '../components/Step2';
 
 const RectifyFacturePage = () => {
-  const { id } = useParams(); 
+  const { id } = useParams();
   const navigate = useNavigate();
-
-  // Étape active
   const [currentStep, setCurrentStep] = useState(0);
-
-  // Données facture
   const [facture, setFacture] = useState(null);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Step1
   const [clientId, setClientId] = useState('');
   const [dateFacture, setDateFacture] = useState('');
   const [changesComment, setChangesComment] = useState('');
-
-  // Step2: lignes
   const [lines, setLines] = useState([]);
 
-  // Chargement : fetch
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
 
-        // 1) Facture
         const factureResp = await axios.get(
           `${process.env.REACT_APP_API_URL}/api/factures/${id}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setFacture(factureResp.data);
 
-        // 2) Clients
         const clientResp = await axios.get(
           `${process.env.REACT_APP_API_URL}/api/clients`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setClients(clientResp.data);
 
-        // 3) Pré-remplir
         setClientId(factureResp.data.client?._id || '');
         setDateFacture(format(new Date(), 'yyyy-MM-dd'));
         setChangesComment('');
 
-        // 4) Prestations => reconstruction
         if (factureResp.data.prestations) {
-          const initialLines = factureResp.data.prestations.map((p) => ({
-            _id: p._id,
-            billingType: p.billingType || 'hourly',
-            description: p.description || '',
-            hours: p.hours || 0,
-            hourlyRate: p.hourlyRate || 0,
-            fixedPrice: p.fixedPrice || 0,
-            quantity: p.quantity || 1,
-            duration: p.duration || 0,
-            durationUnit: p.durationUnit || 'minutes',
-            date: p.date ? p.date.split('T')[0] : '',
-            _deleted: false,
-          }));
+          const initialLines = factureResp.data.prestations.map((p) => {
+            // Pour facturation journalière
+            if (p.billingType === 'daily') {
+              return {
+                _id: p._id,
+                billingType: 'daily',
+                description: p.description || '',
+                days: p.duration / 1440,
+                fixedPrice: p.fixedPrice || 0,
+                duration: p.duration / 1440,
+                durationUnit: 'days',
+                date: p.date ? p.date.split('T')[0] : '',
+                _deleted: false,
+              };
+            }
+
+            // Pour facturation horaire
+            if (p.billingType === 'hourly') {
+              const hours = Math.floor(p.hours);
+              const minutes = Math.round((p.hours - hours) * 60);
+              return {
+                _id: p._id,
+                billingType: 'hourly',
+                description: p.description || '',
+                hours: hours,
+                minutes: minutes,
+                hourlyRate: p.hourlyRate || 0,
+                duration: p.hours * 60,
+                durationUnit: 'hours',
+                date: p.date ? p.date.split('T')[0] : '',
+                _deleted: false,
+              };
+            }
+
+            // Pour facturation forfaitaire
+            return {
+              _id: p._id,
+              billingType: 'fixed',
+              description: p.description || '',
+              fixedPrice: p.fixedPrice || 0,
+              quantity: p.quantity || 1,
+              duration: p.duration || 0,
+              durationUnit: 'hours', // Changé de 'minutes' à 'hours'
+              hours: Math.floor(p.duration / 60), // Ajouté
+              minutes: p.duration % 60, // Ajouté
+              date: p.date ? p.date.split('T')[0] : '',
+              _deleted: false,
+            };
+          });
           setLines(initialLines);
         }
       } catch (error) {
@@ -81,11 +102,9 @@ const RectifyFacturePage = () => {
     fetchData();
   }, [id]);
 
-  // Wizard
   const nextStep = () => setCurrentStep((s) => s + 1);
   const prevStep = () => setCurrentStep((s) => s - 1);
 
-  // Step1
   const Step1 = () => (
     <div className="p-4 space-y-4">
       <h2 className="text-xl font-semibold">Étape 1 : Infos générales</h2>
@@ -141,7 +160,6 @@ const RectifyFacturePage = () => {
     </div>
   );
 
-  // Step2 => utilise le composant Step2View importé
   const Step2Wrapper = () => (
     <Step2View
       lines={lines}
@@ -151,22 +169,21 @@ const RectifyFacturePage = () => {
     />
   );
 
-  // Step3
   const Step3 = () => {
-    // Petit calcul du total final
+    const calculateLineTotal = (line) => {
+      if (line.billingType === 'hourly') {
+        return (line.duration / 60) * line.hourlyRate;
+      } else if (line.billingType === 'fixed') {
+        return line.fixedPrice * (line.quantity || 1);
+      } else if (line.billingType === 'daily') {
+        return line.duration * line.fixedPrice; // duration est déjà en jours
+      }
+      return 0;
+    };
+
     const totalHT = lines
       .filter((l) => !l._deleted)
-      .reduce((acc, l) => {
-        if (l.billingType === 'hourly') {
-          return acc + (l.hours * l.hourlyRate);
-        } else if (l.billingType === 'fixed') {
-          return acc + (l.fixedPrice * (l.quantity || 1));
-        } else if (l.billingType === 'daily') {
-          const nbDays = l.duration / (24 * 60);
-          return acc + nbDays * l.fixedPrice;
-        }
-        return acc;
-      }, 0);
+      .reduce((acc, l) => acc + calculateLineTotal(l), 0);
 
     const taxeURSSAF = parseFloat((totalHT * 0.232).toFixed(2));
     const net = parseFloat((totalHT - taxeURSSAF).toFixed(2));
@@ -175,7 +192,7 @@ const RectifyFacturePage = () => {
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Étape 3 : Récapitulatif</h2>
         <p>Facture N°{facture.invoiceNumber}</p>
-        <p>Client : {clientId}</p>
+        <p>Client : {clients.find(c => c._id === clientId)?.name || 'Inconnu'}</p>
         <p>Date Facture : {dateFacture}</p>
         <p>Commentaire : {changesComment}</p>
 
@@ -202,7 +219,6 @@ const RectifyFacturePage = () => {
     );
   };
 
-  // Soumission finale
   const handleSubmit = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -211,11 +227,24 @@ const RectifyFacturePage = () => {
         return;
       }
 
+      // Convertir les durées pour l'API
+      const prestationsForAPI = lines
+        .filter(line => !line._id.startsWith('temp-'))
+        .map(line => {
+          if (line.billingType === 'daily') {
+            return {
+              ...line,
+              duration: line.duration * 1440,
+            };
+          }
+          return line;
+        });
+
       const payload = {
         clientId,
         dateFacture,
         changesComment,
-        prestations: lines,
+        prestations: prestationsForAPI,
       };
 
       await axios.put(
@@ -239,7 +268,6 @@ const RectifyFacturePage = () => {
     return <div>Facture introuvable</div>;
   }
 
-  // Rendu conditionnel
   let content;
   if (currentStep === 0) {
     content = <Step1 />;
@@ -256,7 +284,7 @@ const RectifyFacturePage = () => {
       </h1>
 
       <Stepper
-        steps={['Infos générales', 'Prestations', 'Récap']}
+        steps={['Infos générales', 'Prestations', 'Récapitulatif']}
         currentStep={currentStep}
       />
 
@@ -268,4 +296,6 @@ const RectifyFacturePage = () => {
 };
 
 export default RectifyFacturePage;
+
+
 

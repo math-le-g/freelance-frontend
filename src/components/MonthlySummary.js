@@ -1,4 +1,4 @@
-// frontend/src/components/MonthlySummary.js
+
 
 import React, { useState, useEffect } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
@@ -31,7 +31,7 @@ function formatFixedDuration(p) {
       return m === 0 ? `${h}h` : `${h}h${m}min`;
     }
     case 'days': {
-      const nbDays = totalMin / (24 * 60);
+      const nbDays = p.duration / (24 * 60);
       if (Number.isInteger(nbDays)) {
         return nbDays === 1 ? '1 jour' : `${nbDays} jours`;
       } else {
@@ -86,7 +86,7 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
 
   const totalHeures = filteredPrestations.reduce((sum, p) => {
     if (p.billingType === 'hourly') {
-      return sum + (p.hours * 60);
+      return sum + Math.round((p.hours || 0) * 60); // Convertir en minutes
     } else {
       return sum + (p.duration || 0);
     }
@@ -97,16 +97,19 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
     const isInvoiced = prestation.invoiceId !== null;
     const isPaid = prestation.invoicePaid;
 
+    // Définir une fonction pour rendre les informations de durée
     const renderDurationInfo = () => {
       if (prestation.billingType === 'hourly') {
-        // ex: "2h × 50€/h"
+        // Ex: "2h30 × 35€/h"
+        const hours = Math.floor(prestation.hours);
+        const minutes = Math.round((prestation.hours - hours) * 60);
         return (
           <div className="flex flex-col">
             <span className="text-sm text-blue-600">
               Durée × Taux horaire
             </span>
             <span className="text-md font-medium text-gray-800">
-              {prestation.hours}h × {prestation.hourlyRate}€/h
+              {hours}h{minutes > 0 ? `${minutes}min` : ''} × {prestation.hourlyRate}€/h
             </span>
           </div>
         );
@@ -125,8 +128,7 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
           </div>
         );
       } else if (prestation.billingType === 'daily') {
-        // Journalier => ex: "100€ × 3 jours => total"
-        // p.duration = 3 * 1440 => 4320
+        // Journalier => ex: "100€ × 3 jours → total"
         const nbDays = prestation.duration / (24 * 60);
         let dayStr = '';
         if (Number.isInteger(nbDays)) {
