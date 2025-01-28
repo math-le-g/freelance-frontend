@@ -13,9 +13,13 @@ const RectifyFacturePage = () => {
   const [facture, setFacture] = useState(null);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Étape 1 : infos générales
   const [clientId, setClientId] = useState('');
   const [dateFacture, setDateFacture] = useState('');
   const [changesComment, setChangesComment] = useState('');
+
+  // Prestations
   const [lines, setLines] = useState([]);
 
   useEffect(() => {
@@ -23,78 +27,93 @@ const RectifyFacturePage = () => {
       try {
         setLoading(true);
         const token = localStorage.getItem('token');
+        if (!token) {
+          toast.error('Token manquant ou session expirée');
+          setLoading(false);
+          return;
+        }
 
+        // 1) Charger la facture
         const factureResp = await axios.get(
           `${process.env.REACT_APP_API_URL}/api/factures/${id}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setFacture(factureResp.data);
+        const fetchedFacture = factureResp.data;
+        setFacture(fetchedFacture);
 
+        // 2) Charger les clients
         const clientResp = await axios.get(
           `${process.env.REACT_APP_API_URL}/api/clients`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setClients(clientResp.data);
 
-        setClientId(factureResp.data.client?._id || '');
+        // Pré-remplir l'étape 1
+        setClientId(fetchedFacture.client?._id || '');
+        // On met par défaut la date du jour (ou la dateFacture d'origine, à vous de choisir)
         setDateFacture(format(new Date(), 'yyyy-MM-dd'));
         setChangesComment('');
 
-        if (factureResp.data.prestations) {
-          const initialLines = factureResp.data.prestations.map((p) => {
-            // Pour facturation journalière
-            if (p.billingType === 'daily') {
-              return {
-                _id: p._id,
-                billingType: 'daily',
-                description: p.description || '',
-                days: p.duration / 1440,
-                fixedPrice: p.fixedPrice || 0,
-                duration: p.duration / 1440,
-                durationUnit: 'days',
-                date: p.date ? p.date.split('T')[0] : '',
-                _deleted: false,
-              };
-            }
-
-            // Pour facturation horaire
+        // 3) Construire les lines à partir des prestations
+        if (fetchedFacture.prestations) {
+          const initialLines = fetchedFacture.prestations.map((p) => {
+            // Reconvertir p.duration, p.durationUnit, etc.
             if (p.billingType === 'hourly') {
-              const hours = Math.floor(p.hours);
-              const minutes = Math.round((p.hours - hours) * 60);
+              const totalMin = p.duration || 0;
+              const hh = Math.floor(totalMin / 60);
+              const mm = totalMin % 60;
               return {
                 _id: p._id,
                 billingType: 'hourly',
-                description: p.description || '',
-                hours: hours,
-                minutes: minutes,
-                hourlyRate: p.hourlyRate || 0,
-                duration: p.hours * 60,
-                durationUnit: 'hours',
+                description: p.description,
                 date: p.date ? p.date.split('T')[0] : '',
+                hourlyRate: p.hourlyRate ?? 0,
+                duration: totalMin,
+                durationUnit: p.durationUnit || 'hours',
+                hours: hh,
+                minutes: mm,
+                _deleted: false,
+              };
+            } else {
+              // "fixed"
+              // Note: si c'est 'daily' coté base, vous voulez le convertir en "fixed" + 'days'
+              let actualUnit = p.durationUnit || 'minutes';
+              let dd = 0;
+              let hh = 0;
+              let mm = 0;
+
+              if (actualUnit === 'days') {
+                dd = (p.duration ?? 1440) / 1440; // ex 720 => 0.5
+              } else if (actualUnit === 'hours') {
+                const tot = p.duration || 0;
+                hh = Math.floor(tot / 60);
+                mm = tot % 60;
+              } else {
+                // minutes direct
+                // on laisse p.duration tel quel
+              }
+
+              return {
+                _id: p._id,
+                billingType: 'fixed',
+                description: p.description,
+                date: p.date ? p.date.split('T')[0] : '',
+                fixedPrice: p.fixedPrice ?? 0,
+                quantity: p.quantity ?? 1,
+                duration: p.duration ?? 0,
+                durationUnit: actualUnit,
+                days: dd,
+                hours: hh,
+                minutes: mm,
                 _deleted: false,
               };
             }
-
-            // Pour facturation forfaitaire
-            return {
-              _id: p._id,
-              billingType: 'fixed',
-              description: p.description || '',
-              fixedPrice: p.fixedPrice || 0,
-              quantity: p.quantity || 1,
-              duration: p.duration || 0,
-              durationUnit: 'hours', // Changé de 'minutes' à 'hours'
-              hours: Math.floor(p.duration / 60), // Ajouté
-              minutes: p.duration % 60, // Ajouté
-              date: p.date ? p.date.split('T')[0] : '',
-              _deleted: false,
-            };
           });
           setLines(initialLines);
         }
       } catch (error) {
-        toast.error('Impossible de charger la facture');
         console.error(error);
+        toast.error('Impossible de charger la facture');
       } finally {
         setLoading(false);
       }
@@ -108,7 +127,6 @@ const RectifyFacturePage = () => {
   const Step1 = () => (
     <div className="p-4 space-y-4">
       <h2 className="text-xl font-semibold">Étape 1 : Infos générales</h2>
-
       <div>
         <label className="block text-sm font-medium mb-1">Client :</label>
         <select
@@ -126,9 +144,7 @@ const RectifyFacturePage = () => {
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">
-          Date de la facture :
-        </label>
+        <label className="block text-sm font-medium mb-1">Date de la facture :</label>
         <input
           type="date"
           className="border p-2 rounded w-full"
@@ -161,22 +177,16 @@ const RectifyFacturePage = () => {
   );
 
   const Step2Wrapper = () => (
-    <Step2View
-      lines={lines}
-      setLines={setLines}
-      prevStep={prevStep}
-      nextStep={nextStep}
-    />
+    <Step2View lines={lines} setLines={setLines} prevStep={prevStep} nextStep={nextStep} />
   );
 
   const Step3 = () => {
+    // Petit calcul du total
     const calculateLineTotal = (line) => {
       if (line.billingType === 'hourly') {
-        return (line.duration / 60) * line.hourlyRate;
+        return (line.duration / 60) * (line.hourlyRate ?? 0);
       } else if (line.billingType === 'fixed') {
-        return line.fixedPrice * (line.quantity || 1);
-      } else if (line.billingType === 'daily') {
-        return line.duration * line.fixedPrice; // duration est déjà en jours
+        return (line.fixedPrice ?? 0) * (line.quantity ?? 1);
       }
       return 0;
     };
@@ -191,15 +201,15 @@ const RectifyFacturePage = () => {
     return (
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Étape 3 : Récapitulatif</h2>
-        <p>Facture N°{facture.invoiceNumber}</p>
-        <p>Client : {clients.find(c => c._id === clientId)?.name || 'Inconnu'}</p>
+        {facture && <p>Facture N°{facture.invoiceNumber}</p>}
+        <p>Client : {clients.find((c) => c._id === clientId)?.name || 'Inconnu'}</p>
         <p>Date Facture : {dateFacture}</p>
         <p>Commentaire : {changesComment}</p>
 
         <p>Nombre de prestations : {lines.filter((l) => !l._deleted).length}</p>
         <p>Total HT : {totalHT.toFixed(2)} €</p>
         <p>URSSAF : {taxeURSSAF} €</p>
-        <p>Net : {net} €</p>
+        <p>Net : {net.toFixed(2)} €</p>
 
         <div className="flex justify-between pt-4">
           <button
@@ -219,6 +229,7 @@ const RectifyFacturePage = () => {
     );
   };
 
+  // Soumission finale
   const handleSubmit = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -227,18 +238,48 @@ const RectifyFacturePage = () => {
         return;
       }
 
-      // Convertir les durées pour l'API
-      const prestationsForAPI = lines
-        .filter(line => !line._id.startsWith('temp-'))
-        .map(line => {
-          if (line.billingType === 'daily') {
-            return {
-              ...line,
-              duration: line.duration * 1440,
-            };
+      // On envoie toutes les lines, y compris celles marquées _deleted, afin que le backend sache
+      // lesquelles supprimer, lesquelles créer, etc.
+      const prestationsForAPI = lines.map((line) => {
+        // Convertir hours+minutes => duration (minutes) si horaire
+        let finalDuration = line.duration ?? 0;
+        let finalUnit = line.durationUnit ?? 'minutes';
+
+        if (line.billingType === 'hourly') {
+          const h = parseInt(line.hours ?? 0, 10);
+          const m = parseInt(line.minutes ?? 0, 10);
+          finalDuration = h * 60 + m;
+          finalUnit = 'hours';
+        } else if (line.billingType === 'fixed') {
+          // si 'days'
+          if (line.durationUnit === 'days') {
+            finalDuration = (line.days ?? 1) * 1440; // ex 0.5 => 720
+            finalUnit = 'days';
+          } else if (line.durationUnit === 'hours') {
+            const h = parseInt(line.hours ?? 0, 10);
+            const m = parseInt(line.minutes ?? 0, 10);
+            finalDuration = h * 60 + m;
+            finalUnit = 'hours';
+          } else {
+            // 'minutes'
+            finalDuration = parseInt(line.duration ?? 0, 10);
+            finalUnit = 'minutes';
           }
-          return line;
-        });
+        }
+
+        return {
+          _id: line._id, // s'il n'y en a pas, le backend créera
+          _deleted: !!line._deleted,
+          billingType: line.billingType,
+          description: line.description || '',
+          fixedPrice: parseFloat(line.fixedPrice ?? 0),
+          quantity: parseInt(line.quantity ?? 1, 10),
+          hourlyRate: parseFloat(line.hourlyRate ?? 0),
+          duration: finalDuration,
+          durationUnit: finalUnit,
+          date: line.date ?? new Date().toISOString(),
+        };
+      });
 
       const payload = {
         clientId,
@@ -256,17 +297,13 @@ const RectifyFacturePage = () => {
       toast.success('Facture rectifiée avec succès');
       navigate('/mes-factures');
     } catch (error) {
-      toast.error('Impossible de rectifier la facture');
       console.error(error);
+      toast.error('Impossible de rectifier la facture');
     }
   };
 
-  if (loading) {
-    return <div>Chargement...</div>;
-  }
-  if (!facture) {
-    return <div>Facture introuvable</div>;
-  }
+  if (loading) return <div>Chargement...</div>;
+  if (!facture) return <div>Facture introuvable</div>;
 
   let content;
   if (currentStep === 0) {
@@ -283,10 +320,7 @@ const RectifyFacturePage = () => {
         Rectifier la Facture N°{facture.invoiceNumber}
       </h1>
 
-      <Stepper
-        steps={['Infos générales', 'Prestations', 'Récapitulatif']}
-        currentStep={currentStep}
-      />
+      <Stepper steps={['Infos générales', 'Prestations', 'Récapitulatif']} currentStep={currentStep} />
 
       <div className="bg-white border rounded shadow">
         {content}
@@ -296,6 +330,4 @@ const RectifyFacturePage = () => {
 };
 
 export default RectifyFacturePage;
-
-
 

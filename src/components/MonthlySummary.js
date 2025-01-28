@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -10,7 +8,6 @@ import { usePrestation } from '../contexts/PrestationContext';
 
 registerLocale('fr', fr);
 
-/** Format total en minutes => "XhYY" */
 const formatTotalDuration = (durationInMinutes) => {
   if (!durationInMinutes) return '0h';
   const hours = Math.floor(durationInMinutes / 60);
@@ -19,27 +16,21 @@ const formatTotalDuration = (durationInMinutes) => {
   return `${hours}h${String(minutes).padStart(2, '0')}`;
 };
 
-/** Format "fixed" ou "daily" => reconstituer la durée en string */
 function formatFixedDuration(p) {
   const totalMin = p.duration || 0;
-  switch (p.durationUnit) {
-    case 'minutes':
-      return `${totalMin}min`; 
-    case 'hours': {
-      const h = Math.floor(totalMin / 60);
-      const m = totalMin % 60;
-      return m === 0 ? `${h}h` : `${h}h${m}min`;
-    }
-    case 'days': {
-      const nbDays = p.duration / (24 * 60);
-      if (Number.isInteger(nbDays)) {
-        return nbDays === 1 ? '1 jour' : `${nbDays} jours`;
-      } else {
-        return `${nbDays} jours`; 
-      }
-    }
-    default:
-      return `${totalMin}min`;
+  if (p.durationUnit === 'days') {
+    const d = totalMin / 1440;
+    if (d === 0.5) return '½ journée';
+    if (d === 1) return '1 journée';
+    return `${d} jours`;
+  } else if (p.durationUnit === 'hours') {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h${m}min`;
+  } else {
+    return `${totalMin} minutes`;
   }
 }
 
@@ -53,7 +44,7 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
 
   const [filteredPrestations, setFilteredPrestations] = useState([]);
 
-  // Filtrer
+  // Filtrer par mois
   useEffect(() => {
     if (!selectedMonth || prestations.length === 0) {
       setFilteredPrestations([]);
@@ -70,7 +61,7 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
     setFilteredPrestations(sortedPrestations);
   }, [prestations, selectedMonth]);
 
-  // Groupement par date => { 'yyyy-MM-dd': { clientName: [..], ...}, ... }
+  // Groupement par date => { 'yyyy-MM-dd': { clientName: [p1, p2...] } }
   const groupedData = filteredPrestations.reduce((acc, p) => {
     const dateKey = format(new Date(p.date), 'yyyy-MM-dd');
     const clientName = p.client?.name || 'Client inconnu';
@@ -81,40 +72,28 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
   }, {});
   const sortedDates = Object.keys(groupedData).sort((a, b) => new Date(a) - new Date(b));
 
-  // Totaux
-  const totalMontant = filteredPrestations.reduce((sum, p) => sum + (p.total || 0), 0);
+  // Totaux globaux (pour le mois entier)
+  const totalMontant = filteredPrestations.reduce((acc, p) => acc + (p.total || 0), 0);
+  const totalHeures = filteredPrestations.reduce((sum, p) => sum + (p.duration || 0), 0);
 
-  const totalHeures = filteredPrestations.reduce((sum, p) => {
-    if (p.billingType === 'hourly') {
-      return sum + Math.round((p.hours || 0) * 60); // Convertir en minutes
-    } else {
-      return sum + (p.duration || 0);
-    }
-  }, 0);
-
-  /** Affichage d’une prestation */
   const RenderPrestation = ({ prestation }) => {
     const isInvoiced = prestation.invoiceId !== null;
     const isPaid = prestation.invoicePaid;
 
-    // Définir une fonction pour rendre les informations de durée
     const renderDurationInfo = () => {
       if (prestation.billingType === 'hourly') {
-        // Ex: "2h30 × 35€/h"
-        const hours = Math.floor(prestation.hours);
-        const minutes = Math.round((prestation.hours - hours) * 60);
+        const totalMin = prestation.duration || 0;
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
         return (
           <div className="flex flex-col">
-            <span className="text-sm text-blue-600">
-              Durée × Taux horaire
-            </span>
+            <span className="text-sm text-blue-600">Durée × Taux horaire</span>
             <span className="text-md font-medium text-gray-800">
-              {hours}h{minutes > 0 ? `${minutes}min` : ''} × {prestation.hourlyRate}€/h
+              {h}h{m ? `${m}min` : ''} × {prestation.hourlyRate}€/h
             </span>
           </div>
         );
-      } else if (prestation.billingType === 'fixed') {
-        // Forfait => p.fixedPrice, p.quantity, + formatFixedDuration
+      } else {
         const displayedDuration = formatFixedDuration(prestation);
         return (
           <div className="flex flex-col">
@@ -122,33 +101,11 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
               Forfait{(prestation.quantity || 1) > 1 ? ` (${prestation.quantity}×)` : ''}
             </span>
             <span className="text-md font-medium text-gray-800">
-              {prestation.fixedPrice}€ 
-              {displayedDuration ? ` - ${displayedDuration}` : ''}
-            </span>
-          </div>
-        );
-      } else if (prestation.billingType === 'daily') {
-        // Journalier => ex: "100€ × 3 jours → total"
-        const nbDays = prestation.duration / (24 * 60);
-        let dayStr = '';
-        if (Number.isInteger(nbDays)) {
-          dayStr = nbDays === 1 ? '1 jour' : `${nbDays} jours`;
-        } else {
-          dayStr = `${nbDays} jours`; 
-        }
-        return (
-          <div className="flex flex-col">
-            <span className="text-sm text-blue-600">
-              Journalier
-            </span>
-            <span className="text-md font-medium text-gray-800">
-              {prestation.fixedPrice}€ × {nbDays} → {prestation.total.toFixed(2)}€
-              {` - ${dayStr}`}
+              {prestation.fixedPrice}€ {displayedDuration ? `- ${displayedDuration}` : ''}
             </span>
           </div>
         );
       }
-      return null;
     };
 
     return (
@@ -160,7 +117,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
             : 'bg-white border border-transparent hover:border-blue-200 hover:shadow-md'
         }`}
       >
-        {/* Badge facturé/payé */}
         {isInvoiced && (
           <div
             className={`absolute -top-3 -right-3 px-3 py-1 rounded-full text-xs font-semibold shadow-sm flex items-center z-10 ${
@@ -182,7 +138,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
         )}
 
         <div className="mt-2">
-          {/* Titre/desc + boutons */}
           <div className="flex items-start mb-3">
             <div className="flex-1 text-gray-800">
               <h4 className="text-lg font-medium">{prestation.description}</h4>
@@ -190,13 +145,13 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
             {!isInvoiced && (
               <div className="flex space-x-1 ml-4">
                 <button
-                  onClick={() => onEdit(prestation)}
+                  onClick={() => onEdit && onEdit(prestation)}
                   className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors duration-200"
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => onDelete(prestation._id)}
+                  onClick={() => onDelete && onDelete(prestation._id)}
                   className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors duration-200"
                 >
                   <TrashIcon className="h-4 w-4" />
@@ -205,7 +160,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
             )}
           </div>
 
-          {/* Bloc durée + total */}
           <div
             className={`flex justify-between items-center p-3 rounded-lg ${
               isInvoiced ? 'bg-gray-300/70' : 'bg-blue-50/50'
@@ -221,12 +175,11 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
                   isInvoiced ? 'text-gray-800' : 'text-blue-600'
                 }`}
               >
-                {prestation.total.toFixed(2)}€
+                {prestation.total?.toFixed(2)}€
               </span>
             </div>
           </div>
 
-          {/* Label "Modifiable" si pas facturé */}
           {!isInvoiced && (
             <div className="mt-2 flex justify-end">
               <div className="bg-green-50 text-green-600 px-2 py-1 rounded-full text-xs font-medium">
@@ -241,7 +194,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
 
   return (
     <div className="mt-8">
-      {/* Sélecteur du mois */}
       <div className="flex justify-between items-center mb-6">
         <div className="w-64">
           <DatePicker
@@ -258,7 +210,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
         </h2>
       </div>
 
-      {/* Tuiles récap */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-lg shadow-md">
           <h3 className="text-sm text-blue-600 mb-1">Prestations du mois</h3>
@@ -274,7 +225,6 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
         </div>
       </div>
 
-      {/* Liste des prestations groupées par jour */}
       <div className="overflow-x-auto pb-4">
         <div className="flex space-x-4">
           {sortedDates.length === 0 ? (
@@ -284,6 +234,15 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
           ) : (
             sortedDates.map((dateKey) => {
               const dailyData = groupedData[dateKey];
+
+              // (★) On récupère **toutes** les prestations de cette journée,
+              //     peu importe le client:
+              const allPrestationsForDay = Object.values(dailyData).flat();
+              const dayTotal = allPrestationsForDay.reduce(
+                (sum, p) => sum + (p.total || 0),
+                0
+              );
+
               return (
                 <div
                   key={dateKey}
@@ -300,7 +259,9 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
                         key={clientName}
                         className="rounded-lg bg-white overflow-hidden border-l-4"
                         style={{
-                          borderLeftColor: `hsl(${(clientName.length * 30) % 360}, 70%, 60%)`,
+                          borderLeftColor: `hsl(${
+                            (clientName.length * 30) % 360
+                          }, 70%, 60%)`,
                           backgroundColor: '#f9fafb',
                         }}
                       >
@@ -308,25 +269,18 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
                           {clientName}
                         </div>
                         <div className="divide-y divide-gray-200">
-                          {prestations.map((prestation) => (
-                            <RenderPrestation
-                              key={prestation._id}
-                              prestation={prestation}
-                            />
+                          {prestations.map((p) => (
+                            <RenderPrestation key={p._id} prestation={p} />
                           ))}
                         </div>
                       </div>
                     ))}
                   </div>
-                  {/* Total de la journée */}
+
+                  {/* (★) ICI on affiche le total de la journée */}
                   <div className="bg-gray-200 p-4 border-t">
                     <p className="text-right font-semibold">
-                      Total :{' '}
-                      {filteredPrestations
-                        .filter((p) => format(new Date(p.date), 'yyyy-MM-dd') === dateKey)
-                        .reduce((sum, p) => sum + (p.total || 0), 0)
-                        .toFixed(2)}{' '}
-                      €
+                      Total : {dayTotal.toFixed(2)} €
                     </p>
                   </div>
                 </div>
@@ -340,3 +294,4 @@ const MonthlySummary = ({ onEdit, onDelete }) => {
 };
 
 export default MonthlySummary;
+
