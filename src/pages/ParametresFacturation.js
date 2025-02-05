@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; 
 import axios from '../utils/axios-config';
 import { useInvoice } from '../contexts/InvoiceContext';
 import { toast } from 'react-toastify';
@@ -26,18 +26,21 @@ const ParametresFacturation = () => {
     thirdReminder: 30,
   });
 
-  // Ajout de la propriété showTvaComment dans displayOptions
+  // États pour les options d'affichage
   const [displayOptions, setDisplayOptions] = useState({
     showDueDateOnInvoice: true,
     showDueDateInHistory: true,
-    showTvaComment: false,
+    // Par défaut, si l'entreprise n'est pas soumise à la TVA, on peut afficher la mention
+    showTvaComment: true,
   });
+
+  // Nouvel état pour indiquer si l'entreprise est soumise à la TVA
+  const [soumisTVA, setSoumisTVA] = useState(false);
 
   // État pour stocker l'objet complet d'informations d'entreprise
   const [businessInfo, setBusinessInfo] = useState({});
 
   useEffect(() => {
-
     const fetchSettings = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -68,25 +71,15 @@ const ParametresFacturation = () => {
         const info = businessInfoResponse.data || {};
         setBusinessInfo(info);
 
-        // Initialiser les options à partir de l’objet récupéré
-        if (info.features) {
-          setReminders({
-            enabled: info.features.automaticReminders?.enabled || false,
-            firstReminder: parseInt(info.features.automaticReminders?.firstReminder || '7', 10),
-            secondReminder: parseInt(info.features.automaticReminders?.secondReminder || '15', 10),
-            thirdReminder: parseInt(info.features.automaticReminders?.thirdReminder || '30', 10),
-          });
-          setInvoiceStatus({
-            enabled: info.features.invoiceStatus?.enabled || false,
-            paymentDelay: info.features.invoiceStatus?.paymentDelay || 30,
-          });
-        }
-        // On ajoute showTvaComment à partir des options enregistrées, avec une valeur par défaut false
+        // Initialiser les options d'affichage à partir de l'objet récupéré
         setDisplayOptions({
           showDueDateOnInvoice: info.displayOptions?.showDueDateOnInvoice ?? true,
           showDueDateInHistory: info.displayOptions?.showDueDateInHistory ?? true,
-          showTvaComment: info.displayOptions?.showTvaComment ?? false,
+          showTvaComment: info.displayOptions?.showTvaComment ?? true,
         });
+
+        // Initialiser "soumisTVA" selon le taux de TVA (si > 0, alors true)
+        setSoumisTVA(info.tauxTVA > 0);
       } catch (error) {
         console.error('Erreur lors de la récupération des paramètres', error);
         toast.error('Erreur lors de la récupération des paramètres de facturation.');
@@ -121,7 +114,10 @@ const ParametresFacturation = () => {
         headers: { Authorization: `Bearer ${token}` },
       };
 
-      // Préparation de l'objet complet pour BusinessInfo en fusionnant les valeurs actuelles avec vos modifications.
+      // Si l'entreprise n'est pas soumise à la TVA, forcer le taux à 0.
+      const updatedTauxTVA = soumisTVA ? businessInfo.tauxTVA : 0;
+
+      // Préparation de l'objet complet pour BusinessInfo en fusionnant les valeurs actuelles avec les modifications.
       const updatedBusinessInfo = {
         name: businessInfo.name || '',
         address: businessInfo.address || '',
@@ -133,6 +129,8 @@ const ParametresFacturation = () => {
         companyType: businessInfo.companyType || '',
         invoiceTitle,
         invoiceNumberStart: invoiceNumberStartInt,
+        taxeURSSAF: businessInfo.taxeURSSAF || 0.246,
+        tauxTVA: updatedTauxTVA,
         features: {
           invoiceStatus: {
             enabled: invoiceStatus.enabled,
@@ -145,7 +143,6 @@ const ParametresFacturation = () => {
             thirdReminder: reminders.thirdReminder,
           },
         },
-        // Inclusion de l'option showTvaComment
         displayOptions: {
           ...displayOptions,
         },
@@ -257,23 +254,83 @@ const ParametresFacturation = () => {
                 Afficher la date d'échéance dans l'historique des factures
               </label>
             </div>
-            {/* Nouveau contrôle pour afficher/masquer la mention TVA */}
+
+            {/* Case pour "Entreprise soumise à la TVA" */}
             <div className="flex items-center">
               <input
                 type="checkbox"
-                id="showTvaComment"
-                checked={displayOptions.showTvaComment}
-                onChange={(e) =>
-                  setDisplayOptions((prev) => ({
-                    ...prev,
-                    showTvaComment: e.target.checked,
-                  }))
-                }
+                id="soumisTVA"
+                checked={soumisTVA}
+                onChange={(e) => {
+                  const isChecked = e.target.checked;
+                  setSoumisTVA(isChecked);
+                  if (isChecked) {
+                    // Si l'entreprise est soumise à la TVA, désactiver l'affichage de la mention TVA non applicable.
+                    setDisplayOptions((prev) => ({ ...prev, showTvaComment: false }));
+                  }
+                }}
                 className="h-4 w-4 text-blue-600 rounded border-gray-300"
               />
-              <label htmlFor="showTvaComment" className="ml-2">
-                Afficher la mention <span className="italic">TVA non applicable - art.293B du CGI</span>
+              <label htmlFor="soumisTVA" className="ml-2">
+                Entreprise soumise à la TVA
               </label>
+            </div>
+
+            {/* Champ de saisie du taux de TVA (affiché si soumisTVA est vrai) */}
+            {soumisTVA && (
+              <div>
+                <label className="block text-gray-700">Taux de TVA (%) :</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={businessInfo.tauxTVA ? (businessInfo.tauxTVA * 100).toFixed(1) : ''}
+                  onChange={(e) =>
+                    setBusinessInfo({
+                      ...businessInfo,
+                      tauxTVA: parseFloat(e.target.value) / 100
+                    })
+                  }
+                  className="mt-1 w-full p-2 border border-gray-300 rounded"
+                />
+              </div>
+            )}
+
+            {/* Si l'entreprise n'est pas soumise à la TVA, l'utilisateur peut choisir d'afficher ou non la mention */}
+            {!soumisTVA && (
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="showTvaComment"
+                  checked={displayOptions.showTvaComment}
+                  onChange={(e) =>
+                    setDisplayOptions((prev) => ({
+                      ...prev,
+                      showTvaComment: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                />
+                <label htmlFor="showTvaComment" className="ml-2">
+                  Afficher la mention <span className="italic">TVA non applicable - art.293B du CGI</span>
+                </label>
+              </div>
+            )}
+
+            {/* Contrôle pour le taux URSSAF */}
+            <div>
+              <label className="block text-gray-700">Taux URSSAF (%) :</label>
+              <input
+                type="number"
+                step="0.1"
+                value={businessInfo.taxeURSSAF ? (businessInfo.taxeURSSAF * 100).toFixed(1) : ''}
+                onChange={(e) =>
+                  setBusinessInfo({
+                    ...businessInfo,
+                    taxeURSSAF: parseFloat(e.target.value) / 100
+                  })
+                }
+                className="mt-1 w-full p-2 border border-gray-300 rounded"
+              />
             </div>
           </div>
         </div>
@@ -419,4 +476,3 @@ const ParametresFacturation = () => {
 };
 
 export default ParametresFacturation;
-

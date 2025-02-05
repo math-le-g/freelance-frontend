@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import RectifyFacturePage from './pages/RectifyFacturePage';
+import InvoiceRectification from './components/InvoiceRectification';
 import ClientList from './components/ClientList';
 import AddClient from './components/AddClient';
 import AddPrestation from './components/AddPrestation';
@@ -283,7 +283,7 @@ function App() {
                       <MonthlySummary
                         onEdit={handleEdit}
                         onDelete={handleDeletePrestation}
-                         />
+                      />
                     </div>
                     {Object.keys(businessInfo).length > 0 && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -339,14 +339,16 @@ function App() {
                 </PrivateRoute>
               }
             />
+
             <Route
               path="/rectify-facture/:id"
               element={
                 <PrivateRoute>
-                  <RectifyFacturePage />
+                  <InvoiceRectification />
                 </PrivateRoute>
               }
             />
+
           </Routes>
         </div>
         <Modal isOpen={isSignupModalOpen} onClose={() => setIsSignupModalOpen(false)}>

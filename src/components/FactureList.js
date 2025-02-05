@@ -146,20 +146,21 @@ const FactureList = () => {
   const handlePreview = async (facture) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(
+      const response = await axios.get(
         `${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob'
         }
       );
-
-      if (!response.ok) throw new Error('Erreur lors de la récupération du PDF');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+  
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
       setPdfUrl(url);
       setSelectedFacture(facture);
       setIsPreviewModalOpen(true);
     } catch (error) {
+      console.error('Erreur preview:', error);
       toast.error('Erreur lors de la prévisualisation');
     }
   };
@@ -534,12 +535,11 @@ const ListView = () => (
             {/* Contenu du Modal */}
             <div className="flex flex-1 gap-6 min-h-0">
               {/* Prévisualisation PDF - prend 60% de l'espace */}
-              <div className="w-3/5 bg-gray-50 rounded-lg overflow-hidden">
+              <div className="w-3/5 bg-gray-50 rounded-lg overflow-hidden h-full">
                 <iframe
-                  src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                  className="pdf-viewer"
-                  type="application/pdf"
-                  title={`Facture ${selectedFacture.invoiceNumber}`}
+                  src={pdfUrl}
+                  className="w-full h-full"
+                  style={{ minHeight: "600px" }}
                 />
               </div>
 

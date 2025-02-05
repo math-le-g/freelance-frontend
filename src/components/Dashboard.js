@@ -269,10 +269,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/*
-        Plus de doublon sur "MonthlySummary" ou "AddPrestation" ici !
-        Tout se passe déjà ailleurs (App.js ou dans vos autres routes).
-      */}
+      
     </div>
   );
 };
