@@ -1,108 +1,155 @@
-// frontend/src/components/SignupModalContent.js
-
 import React, { useState, useContext } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
+import { 
+  EnvelopeIcon, 
+  LockClosedIcon,
+  UserIcon
+} from '@heroicons/react/24/outline';
 
 const SignupModalContent = ({ onClose }) => {
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName]   = useState('');
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const { login } = useContext(AuthContext);
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     try {
-      // Appel de l'API pour s'inscrire
-      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/signup`, { 
-        firstName, 
-        lastName, 
-        email, 
-        password 
+      setIsSubmitting(true);
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/signup`, {
+        firstName,
+        lastName,
+        email,
+        password
       });
-  
-      // Si la réponse contient un token
+
       if (response.data.token) {
-        // Utiliser la fonction de login du contexte
         login(response.data.token, response.data.user);
-  
-        //console.log('Token stocké dans le localStorage');
-  
-        // Fermer le modal d'inscription
         onClose();
-  
-        // Rediriger vers le dashboard
         navigate('/dashboard');
       } else {
         toast.error('Inscription échouée: Token manquant');
       }
     } catch (error) {
       if (error.response) {
-        console.error('Erreur lors de l\'inscription:', error.response.data);
-        toast.error(error.response.data.message || 'Erreur lors de l\'inscription. Veuillez réessayer.');
+        toast.error(error.response.data.message || 'Erreur lors de l\'inscription');
       } else if (error.request) {
-        console.error('Aucune réponse du serveur:', error.request);
-        toast.error('Aucune réponse du serveur. Veuillez vérifier votre connexion.');
+        toast.error('Aucune réponse du serveur');
       } else {
-        console.error('Erreur lors de la configuration de la requête:', error.message);
-        toast.error('Une erreur s\'est produite. Veuillez réessayer.');
+        toast.error('Une erreur s\'est produite');
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-4 text-center">Inscription</h2>
-      <form onSubmit={handleSignup} className="space-y-4">
-        <div>
-          <label className="block text-gray-700">Prénom :</label>
-          <input
-            type="text"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+    <div className="text-white">
+      <h2 className="text-2xl font-bold mb-6 text-center">Inscription</h2>
+      <form onSubmit={handleSignup} className="space-y-6">
+        {/* Prénom */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Prénom</label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <UserIcon className="h-5 w-5 text-white/50" />
+            </div>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="block w-full pl-10 bg-white/10 border border-white/20 rounded-lg
+                        focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                        placeholder:text-white/30 text-white"
+              placeholder="John"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-gray-700">Nom :</label>
-          <input
-            type="text"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+
+        {/* Nom */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Nom</label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <UserIcon className="h-5 w-5 text-white/50" />
+            </div>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="block w-full pl-10 bg-white/10 border border-white/20 rounded-lg
+                        focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                        placeholder:text-white/30 text-white"
+              placeholder="Doe"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-gray-700">Email :</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+
+        {/* Email */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Email</label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <EnvelopeIcon className="h-5 w-5 text-white/50" />
+            </div>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="block w-full pl-10 bg-white/10 border border-white/20 rounded-lg
+                        focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                        placeholder:text-white/30 text-white"
+              placeholder="john.doe@example.com"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-gray-700">Mot de passe :</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+
+        {/* Mot de passe */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-white/90">Mot de passe</label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <LockClosedIcon className="h-5 w-5 text-white/50" />
+            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="block w-full pl-10 bg-white/10 border border-white/20 rounded-lg
+                        focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                        placeholder:text-white/30 text-white"
+              placeholder="••••••••"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
         </div>
+
         <button
           type="submit"
-          className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+          className={`w-full py-3 px-4 rounded-lg font-medium transition-all
+                     ${isSubmitting 
+                       ? 'bg-white/20 cursor-not-allowed' 
+                       : 'bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600'
+                     }
+                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+          disabled={isSubmitting}
         >
-          S'inscrire
+          {isSubmitting ? 'Inscription...' : 'S\'inscrire'}
         </button>
       </form>
     </div>
@@ -110,7 +157,6 @@ const SignupModalContent = ({ onClose }) => {
 };
 
 export default SignupModalContent;
-
 
 
 

@@ -2,18 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Styles personnalisés pour les PDF */
+/* ==========
+   Styles personnalisés
+   ========== */
+
+/* Couche "utilities" pour ajouter tes classes custom */
 @layer utilities {
-    /* Masquer les contrôles PDF */
-    .pdf-viewer {
-      @apply w-full h-full border-0 select-none;
-    }
+  /* --- PDF viewer --- */
+  .pdf-viewer {
+    @apply w-full h-full border-0 select-none;
   }
-  
-  /* Styles spécifiques pour les iframes PDF */
-  iframe[type='application/pdf'] {
-    -webkit-user-select: none;
-    user-select: none;
+
+  /* --- Cards 3D --- */
+  .card-3d {
+    @apply bg-white rounded-lg p-6 shadow-md transition-transform duration-300;
+    /* Ombre de base plus douce (shadow-md) et transition plus fluide */
   }
+  .card-3d:hover {
+    @apply -translate-y-1 shadow-lg;
+    /* Petit “saut” en hover (-translate-y-1) et ombre plus marquée (shadow-lg) */
+  }
+
+  /* --- Boutons 3D --- */
+  .btn-3d {
+    @apply bg-blue-600 text-white py-2 px-4 rounded-md shadow transition-transform duration-200;
+    /* Harmonisation avec un bleu-600 (plus cohérent avec le design),
+       coins arrondis, transition */
+  }
+  .btn-3d:hover {
+    @apply -translate-y-1 shadow-lg;
+    /* Légère élévation et ombre accentuée au hover */
+  }
+}
+
+/* --- Styles spécifiques pour les iframes PDF --- */
+iframe[type='application/pdf'] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Reset de base sur html, body, #root */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* 
+Classe pour un fond moderne, si tu souhaites 
+garder le motif discret en fond (au lieu du simple bg-gray-50).
+Tu peux l'appliquer sur un conteneur global 
+en .bg-modern { ... } 
+*/
+.bg-modern {
+  /* Fond gris/bleu moyen */
+  background-color: #334a79;
+
+  /* Motif blanc semi-transparent (0.05) */
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.05) 25%, transparent 25%),
+    linear-gradient(225deg, rgba(255,255,255,0.05) 25%, transparent 25%),
+    linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%),
+    linear-gradient(315deg, rgba(255,255,255,0.05) 25%, transparent 25%);
+  background-size: 40px 40px;
+  background-position: 0 0, 0 20px, 20px -20px, -20px 0px;
+}
+
+
+
+
 
  
