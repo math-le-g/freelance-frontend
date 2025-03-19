@@ -5,7 +5,9 @@ import { Link } from 'react-router-dom';
 import {
   DocumentDuplicateIcon,
   InformationCircleIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  BanknotesIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 const InvoiceRelations = ({ facture, originalFacture, rectifications }) => {
@@ -57,6 +59,79 @@ const InvoiceRelations = ({ facture, originalFacture, rectifications }) => {
               )}
             </div>
           </div>
+
+          {/* Détails des prestations modifiées */}
+          {facture.rectificationInfo?.prestationsModifiees?.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <h4 className="text-sm font-medium text-white/80">Détails des modifications</h4>
+              {facture.rectificationInfo.prestationsModifiees.map((pm, idx) => (
+                <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">
+                      {pm.type === 'MODIFIEE' ? 'Prestation modifiée' : 
+                      pm.type === 'AJOUTEE' ? 'Nouvelle prestation' : 'Prestation supprimée'}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      pm.type === 'MODIFIEE' ? 'bg-yellow-500/30 text-yellow-300' :
+                      pm.type === 'AJOUTEE' ? 'bg-green-500/30 text-green-300' : 
+                      'bg-red-500/30 text-red-300'
+                    }`}>
+                      {pm.type}
+                    </span>
+                  </div>
+                  
+                  {pm.type === 'MODIFIEE' && (
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <div className="bg-red-900/20 border border-red-900/30 rounded-lg p-2">
+                        <div className="text-xs text-red-300 mb-1">Avant</div>
+                        <div className="text-sm">{pm.anciensDetails.description}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {pm.anciensDetails.billingType === 'hourly' 
+                            ? `${pm.anciensDetails.hours}h × ${pm.anciensDetails.hourlyRate}€` 
+                            : `${pm.anciensDetails.fixedPrice}€ ${pm.anciensDetails.quantity > 1 ? `× ${pm.anciensDetails.quantity}` : ''}`}
+                        </div>
+                        <div className="text-xs font-bold mt-1">{pm.anciensDetails.total}€</div>
+                      </div>
+                      <div className="bg-green-900/20 border border-green-900/30 rounded-lg p-2">
+                        <div className="text-xs text-green-300 mb-1">Après</div>
+                        <div className="text-sm">{pm.nouveauxDetails.description}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {pm.nouveauxDetails.billingType === 'hourly' 
+                            ? `${pm.nouveauxDetails.hours}h × ${pm.nouveauxDetails.hourlyRate}€` 
+                            : `${pm.nouveauxDetails.fixedPrice}€ ${pm.nouveauxDetails.quantity > 1 ? `× ${pm.nouveauxDetails.quantity}` : ''}`}
+                        </div>
+                        <div className="text-xs font-bold mt-1">{pm.nouveauxDetails.total}€</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {pm.type === 'AJOUTEE' && (
+                    <div className="bg-green-900/20 border border-green-900/30 rounded-lg p-2 mt-2">
+                      <div className="text-sm">{pm.nouveauxDetails.description}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {pm.nouveauxDetails.billingType === 'hourly' 
+                          ? `${pm.nouveauxDetails.hours}h × ${pm.nouveauxDetails.hourlyRate}€` 
+                          : `${pm.nouveauxDetails.fixedPrice}€ ${pm.nouveauxDetails.quantity > 1 ? `× ${pm.nouveauxDetails.quantity}` : ''}`}
+                      </div>
+                      <div className="text-xs font-bold mt-1">{pm.nouveauxDetails.total}€</div>
+                    </div>
+                  )}
+                  
+                  {pm.type === 'SUPPRIMEE' && (
+                    <div className="bg-red-900/20 border border-red-900/30 rounded-lg p-2 mt-2">
+                      <div className="text-sm">{pm.anciensDetails.description}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {pm.anciensDetails.billingType === 'hourly' 
+                          ? `${pm.anciensDetails.hours}h × ${pm.anciensDetails.hourlyRate}€` 
+                          : `${pm.anciensDetails.fixedPrice}€ ${pm.anciensDetails.quantity > 1 ? `× ${pm.anciensDetails.quantity}` : ''}`}
+                      </div>
+                      <div className="text-xs font-bold mt-1">{pm.anciensDetails.total}€</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Différences de montants */}
           <div className="mt-4 space-y-2">
@@ -111,6 +186,32 @@ const InvoiceRelations = ({ facture, originalFacture, rectifications }) => {
                 </Link>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Nouvelle section pour les avoirs liés */}
+      {facture.avoir && (
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold mb-3 flex items-center">
+            <BanknotesIcon className="h-4 w-4 mr-2 text-pink-400" />
+            Avoir lié
+          </h4>
+          <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-3">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <BanknotesIcon className="h-4 w-4 text-pink-400" />
+                <span className="text-sm">
+                  Avoir n°{facture.avoir.numero} du {format(new Date(facture.avoir.date), 'dd/MM/yyyy', { locale: fr })}
+                </span>
+              </div>
+              <span className="font-bold text-pink-400">-{facture.avoir.montant.toFixed(2)} €</span>
+            </div>
+            {facture.avoir.motif && (
+              <p className="text-xs text-gray-300 mt-2">
+                Motif: {facture.avoir.motif}
+              </p>
+            )}
           </div>
         </div>
       )}

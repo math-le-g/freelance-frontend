@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import AvoirsWidget from './components/AvoirsWidget';
 
 import { Bars3Icon } from '@heroicons/react/24/solid';
 import axios from './utils/axios-config';
@@ -307,9 +308,9 @@ function App() {
                   + d'autres rangées en-dessous "text-2xl font-bold mb-2 relative z-10"
                 */}
                   <div className="container mx-auto px-6 pt-30 space-y-6">
-                  <h1 className="text-2xl font-bold text-white">
-                    Tableau de bord
-                  </h1>
+                    <h1 className="text-2xl font-bold text-white">
+                      Tableau de bord
+                    </h1>
                     {/* RANGEE 1 : Mensuel / Annuel / Top Clients */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       {/* CA Mensuel */}
@@ -324,67 +325,69 @@ function App() {
                       <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-4">
                         <TopClients />
                       </div>
+                      
 
-                      {/* RANGEE 2 : Sélection client (col1), AddPrestation (col2-3) */}
-                      <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-4 col-span-1">
-                        <h2 className="text-lg font-semibold mb-4">Sélectionner un client</h2>
-                        <div className="space-y-4">
-                          <select
-                            value={selectedClient?._id || ''}
-                            onChange={(e) => handleClientSelect(e.target.value)}
-                            className="
+
+                        {/* RANGEE 2 : Sélection client (col1), AddPrestation (col2-3) */}
+                        <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-4 col-span-1">
+                          <h2 className="text-lg font-semibold mb-4">Sélectionner un client</h2>
+                          <div className="space-y-4">
+                            <select
+                              value={selectedClient?._id || ''}
+                              onChange={(e) => handleClientSelect(e.target.value)}
+                              className="
                             w-full p-2 border border-gray-300 rounded-md
                             text-gray-900
                             focus:outline-none focus:ring-2 focus:ring-blue-500
                           "
-                          >
-                            <option value="">- Sélectionner un client -</option>
-                            {clients.map((client) => (
-                              <option key={client._id} value={client._id}>
-                                {client.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => setIsModalOpen(true)}
-                            className="
+                            >
+                              <option value="">- Sélectionner un client -</option>
+                              {clients.map((client) => (
+                                <option key={client._id} value={client._id}>
+                                  {client.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => setIsModalOpen(true)}
+                              className="
                             w-full bg-blue-600 text-white py-2 px-4 rounded-md
                             hover:bg-blue-700 transition-colors font-semibold
                           "
-                          >
-                            Ajouter un client
-                          </button>
+                            >
+                              Ajouter un client
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      {/* AddPrestation */}
-                      <div className="
+                        {/* AddPrestation */}
+                        <div className="
                       bg-white/10 border border-white/20 backdrop-blur-sm
                       rounded-md shadow-sm p-4 col-span-2
                     ">
-                      <h2 className="text-lg font-semibold mb-4">Ajouter une prestation</h2>
-                        <AddPrestation
-                          addPrestation={addPrestation}
-                          updatePrestation={updatePrestation}
-                          initialData={currentPrestation}
-                          selectedClient={selectedClient}
-                          setCurrentPrestation={setCurrentPrestation}
-                        />
+                          <h2 className="text-lg font-semibold mb-4">Ajouter une prestation</h2>
+                          <AddPrestation
+                            addPrestation={addPrestation}
+                            updatePrestation={updatePrestation}
+                            initialData={currentPrestation}
+                            selectedClient={selectedClient}
+                            setCurrentPrestation={setCurrentPrestation}
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* RANGEE 3 : MonthlySummary */}
-                    <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-4">
-                      <MonthlySummary onEdit={handleEdit} onDelete={handleDeletePrestation} />
-                    </div>
-
-                    {/* RANGEE 4 : InvoiceCreator + InvoicePreview */}
-                    {Object.keys(businessInfo).length > 0 && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
-                        <InvoiceCreator businessInfo={businessInfo} clients={clients} />
-                        <InvoicePreview />
+                      {/* RANGEE 3 : MonthlySummary */}
+                      <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-4">
+                        <MonthlySummary onEdit={handleEdit} onDelete={handleDeletePrestation} />
                       </div>
-                    )}
-                  </div>
+
+                      {/* RANGEE 4 : InvoiceCreator + InvoicePreview */}
+                      {Object.keys(businessInfo).length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
+                          <InvoiceCreator businessInfo={businessInfo} clients={clients} />
+                          <InvoicePreview />
+                        </div>
+                      )}
+                    </div>
                 </PrivateRoute>
               }
             />
@@ -444,7 +447,7 @@ function App() {
                 </PrivateRoute>
               }
             />
-           
+
 
           </Routes>
         </div>
@@ -464,7 +467,7 @@ function App() {
         )}
       </div>
 
-    </QueryClientProvider>
+    </QueryClientProvider >
   );
 }
 

@@ -1,4 +1,3 @@
-// frontend/src/components/FactureList.js
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -7,15 +6,18 @@ import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+
 import RectificationIntroModal from './RectificationIntroModal';
 import RectificationBadge from './RectificationBadge';
-
-
-// Modal de prévisualisation PDF
+import CancelInvoiceModal from './CancelInvoiceModal';
+import CreditNoteModal from './CreditNoteModal';
 import PDFPreviewModal from './PDFPreviewModal';
 import PaymentModal from './PaymentModal';
+import CreditNoteBadge from './CreditNoteBadge';
 
-// Icônes Heroicons
+import { INVOICE_STATUS } from '../utils/constants';
+import StatusBadge from './common/StatutsBadge';
+
 import {
   EyeIcon,
   ArrowDownTrayIcon,
@@ -24,6 +26,15 @@ import {
   Bars3Icon,
   CheckIcon,
   PencilIcon,
+  XCircleIcon,
+  DocumentTextIcon,
+  ReceiptRefundIcon,
+  PaperAirplaneIcon,
+  DocumentDuplicateIcon,
+  CalendarIcon,
+  UserIcon,
+  CurrencyEuroIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 const FactureList = () => {
@@ -53,9 +64,9 @@ const FactureList = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [isPaymentModalOpenPaymentList, setIsPaymentModalOpenPaymentList] = useState(false);
 
+  // Rectification
   const [isRectificationModalOpen, setIsRectificationModalOpen] = useState(false);
   const [selectedFactureForRectification, setSelectedFactureForRectification] = useState(null);
-
 
   // Tri
   const [sortConfig, setSortConfig] = useState({
@@ -63,45 +74,46 @@ const FactureList = () => {
     direction: 'desc',
   });
 
-  // ---------- UTILS ----------
+  // Annulation & Avoir (Credit Note)
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
+  const [selectedInvoiceForCancel, setSelectedInvoiceForCancel] = useState(null);
+  const [selectedInvoiceForCreditNote, setSelectedInvoiceForCreditNote] = useState(null);
+
+  // Détails de l'avoir
+  const [isCreditNoteDetailModalOpen, setIsCreditNoteDetailModalOpen] = useState(false);
+  const [selectedCreditNote, setSelectedCreditNote] = useState(null);
+
+  // -----------------------------------------------------------
+  // UTILS
+  // -----------------------------------------------------------
 
   // Tronquer un texte long
   const truncateText = (text, maxLength) =>
     text && text.length > maxLength ? text.substring(0, maxLength) + '...' : text || '';
 
-  // Afficher le statut (avec locked)
+  // Afficher le statut (incluant locked / statut / status)
   const getStatutLabel = (facture) => {
-    if (facture.locked) {
-      return (
-        <span className="px-2 py-1 rounded-full text-xs bg-gray-600 text-white">
-          Verrouillée
-        </span>
-      );
-    }
-    switch (facture.status) {
-      case 'paid':
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-green-500 text-white">
-            Payée
-          </span>
-        );
-      case 'overdue':
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-red-500 text-white">
-            En retard
-          </span>
-        );
-      default:
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-orange-500 text-white">
-            En attente
-          </span>
-        );
+    return (
+      <StatusBadge
+        status={facture.status}
+        isSentToClient={facture.isSentToClient}
+        isLocked={facture.locked}
+      />
+    );
+  };
+  
+
+  const handleViewCreditNote = (facture) => {
+    if (facture.avoir) {
+      setSelectedCreditNote(facture);
+      setIsCreditNoteDetailModalOpen(true);
     }
   };
 
-  // ---------- FETCHS ----------
-
+  // -----------------------------------------------------------
+  // FETCH
+  // -----------------------------------------------------------
   const fetchFactures = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
@@ -145,8 +157,9 @@ const FactureList = () => {
     fetchClients();
   }, [fetchFactures, fetchClients]);
 
-  // ---------- SORT ----------
-
+  // -----------------------------------------------------------
+  // SORT
+  // -----------------------------------------------------------
   const handleSort = (key) => {
     const direction =
       sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
@@ -170,8 +183,9 @@ const FactureList = () => {
     setFactures(sorted);
   };
 
-  // ---------- PAIEMENT ----------
-
+  // -----------------------------------------------------------
+  // PAIEMENT
+  // -----------------------------------------------------------
   const handleMarkAsPaid = (invoiceId) => {
     setSelectedInvoiceId(invoiceId);
     setIsPaymentModalOpenPaymentList(true);
@@ -196,12 +210,68 @@ const FactureList = () => {
       toast.success('Paiement enregistré avec succès');
     } catch (error) {
       console.error('Erreur paiement :', error);
-      toast.error('Erreur lors de l’enregistrement du paiement');
+      toast.error("Erreur lors de l'enregistrement du paiement");
     }
   };
 
-  // ---------- PDF PREVIEW ----------
+  // -----------------------------------------------------------
+  // MARQUAGE ET DUPLICATION
+  // -----------------------------------------------------------
+  const handleMarkAsSent = async (factureId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const confirmSend = window.confirm('Êtes-vous sûr de vouloir marquer cette facture comme envoyée au client ? Cette action est irréversible et la facture ne pourra plus être supprimée.');
+      if (!confirmSend) return;
 
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/factures/${factureId}/mark-as-sent`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        await fetchFactures();
+        toast.success('Facture marquée comme envoyée au client');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors du marquage de la facture');
+    }
+  };
+
+  const handleDuplicateInvoice = async (factureId) => {
+    try {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/factures/${factureId}/duplicate`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        await fetchFactures();
+        toast.success('Facture dupliquée avec succès');
+      }
+    } catch (error) {
+      console.error('Erreur duplication:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de la duplication de la facture');
+    }
+  };
+
+  // -----------------------------------------------------------
+  // PDF PREVIEW
+  // -----------------------------------------------------------
   const handlePreview = async (facture) => {
     try {
       const token = localStorage.getItem('token');
@@ -255,8 +325,9 @@ const FactureList = () => {
     }
   };
 
-  // ---------- SUPPRESSION ----------
-
+  // -----------------------------------------------------------
+  // SUPPRESSION
+  // -----------------------------------------------------------
   const handleDeleteFacture = async (factureId) => {
     try {
       const token = localStorage.getItem('token');
@@ -264,6 +335,15 @@ const FactureList = () => {
         toast.error('Session expirée');
         return;
       }
+
+      // Vérifier d'abord si la facture peut être supprimée
+      const factureToDelete = factures.find(f => f._id === factureId);
+
+      if (factureToDelete.isSentToClient) {
+        toast.error('Impossible de supprimer une facture déjà envoyée au client. Utilisez plutôt la fonction d\'annulation ou de rectification.');
+        return;
+      }
+
       const confirmDelete = window.confirm('Voulez-vous vraiment supprimer cette facture ?');
       if (!confirmDelete) return;
 
@@ -278,136 +358,176 @@ const FactureList = () => {
     }
   };
 
-  // ---------- RECTIFICATION (Nouvelle logique) ----------
+  // -----------------------------------------------------------
+  // RECTIFICATION
+  // -----------------------------------------------------------
   const handleRectifyNew = (facture) => {
     setSelectedFactureForRectification(facture);
     setIsRectificationModalOpen(true);
   };
 
-  // ---------- RENDUS ----------
+  // -----------------------------------------------------------
+  // ANNULATION & AVOIR
+  // -----------------------------------------------------------
+  const handleCancelInvoice = (facture) => {
+    setSelectedInvoiceForCancel(facture);
+    setIsCancelModalOpen(true);
+  };
 
+  const handleCreditNote = (facture) => {
+    setSelectedInvoiceForCreditNote(facture);
+    setIsCreditNoteModalOpen(true);
+  };
+
+  const handleCancelSubmit = async (cancelData) => {
+    try {
+      const token = localStorage.getItem('token');
+      toast.info('Annulation en cours.', { autoClose: 1500 });
+
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceForCancel._id}/cancel`,
+        cancelData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        await fetchFactures();
+        setIsCancelModalOpen(false);
+        toast.success('Facture annulée avec succès');
+      } else {
+        throw new Error(response.data.message || 'Erreur lors de l\'annulation');
+      }
+    } catch (error) {
+      console.error('Erreur annulation:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'annulation de la facture');
+    }
+  };
+
+  const handleCreditNoteSubmit = async (creditNoteData) => {
+    try {
+      const token = localStorage.getItem('token');
+      toast.info('Création de l\'avoir en cours.', { autoClose: 1500 });
+
+      // Vérifier d'abord si la facture a déjà un avoir valide
+    const factureToCheck = factures.find(f => f._id === selectedInvoiceForCreditNote._id);
+    const hasValidCreditNote = factureToCheck?.avoir && 
+                              factureToCheck.avoir.numero && 
+                              factureToCheck.avoir.montant;
+    
+    if (hasValidCreditNote) {
+      toast.error(`Cette facture a déjà un avoir (${factureToCheck.avoir.numero})`);
+      setIsCreditNoteModalOpen(false);
+      return;
+    }
+
+    const response = await axios.post(
+      `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceForCreditNote._id}/credit-note`,
+      creditNoteData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data.success) {
+      await fetchFactures();
+      setIsCreditNoteModalOpen(false);
+      toast.success(`Avoir ${response.data.avoir.numero} créé avec succès`);
+
+      // Rechargement après un délai pour s'assurer que l'UI est à jour
+      setTimeout(async () => {
+        await fetchFactures();
+      }, 1000);
+    } else {
+      throw new Error(response.data.message || 'Erreur lors de la création de l\'avoir');
+    }
+  } catch (error) {
+    console.error('Erreur création avoir:', error);
+
+    let errorMsg = 'Erreur lors de la création de l\'avoir';
+    if (error.response) {
+      console.log('Détails de l\'erreur:', error.response);
+      errorMsg = error.response.data?.message || errorMsg;
+    }
+
+    toast.error(errorMsg);
+  }
+};
+
+  async function handlePreviewCreditNote(factureId) {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/api/factures/${factureId}/credit-note/pdf`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob'
+        }
+      );
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const pdfUrl = URL.createObjectURL(blob);
+      window.open(pdfUrl, '_blank');
+    } catch (error) {
+      console.error('Erreur aperçu PDF Avoir :', error);
+      toast.error("Impossible d'afficher l'avoir");
+    }
+  }
+
+  // -----------------------------------------------------------
+  // SUB COMPONENTS: TABLES / VIEWS
+  // -----------------------------------------------------------
   const ListView = () => (
-    <table className="min-w-full text-sm">
-      <thead className="bg-white/20 text-gray-100">
-        <tr>
-          <th
-            className="px-4 py-2 text-left cursor-pointer"
-            onClick={() => handleSort('invoiceNumber')}
-          >
-            N° Facture
-          </th>
-          <th
-            className="px-4 py-2 text-left cursor-pointer"
-            onClick={() => handleSort('date')}
-          >
-            Date
-          </th>
-          <th className="px-4 py-2 text-left">Client</th>
-          <th className="px-4 py-2 text-left">Brut (€)</th>
-          <th className="px-4 py-2 text-left">URSSAF (€)</th>
-          <th className="px-4 py-2 text-left">Net (€)</th>
-          <th className="px-4 py-2 text-left">Statut</th>
-          <th className="px-4 py-2 text-center">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {factures.map((facture) => {
-          const displayDate = facture.dateEdition
-            ? format(new Date(facture.dateEdition), 'dd/MM/yyyy', { locale: fr })
-            : format(new Date(facture.createdAt), 'dd/MM/yyyy', { locale: fr });
-
-          return (
-            <tr
-              key={facture._id}
-              className="border-b border-white/10 hover:bg-white/5"
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-separate border-spacing-0 text-sm">
+        <thead>
+          <tr className="bg-blue-900/40">
+            <th
+              className="sticky top-0 px-3 py-2 text-center cursor-pointer border-b border-b-blue-700"
+              onClick={() => handleSort('invoiceNumber')}
             >
-              <td className="px-4 py-2">
-                <div className="flex items-center gap-2">
-                  {facture.invoiceNumber}
-                  {facture.isRectification && (
-                    <RectificationBadge type="rectification" />
-                  )}
-                  {facture.statut === 'RECTIFIEE' && (
-                    <RectificationBadge type="rectified" />
-                  )}
-                </div>
-              </td>
-              <td className="px-4 py-2">{displayDate}</td>
-              <td className="px-4 py-2 w-64" title={facture.client?.name || 'N/A'}>
-                {truncateText(facture.client?.name, 60)}
-              </td>
-              <td className="px-4 py-2">{facture.montantHT?.toFixed(2) ?? 'N/A'}</td>
-              <td className="px-4 py-2">{facture.taxeURSSAF?.toFixed(2) ?? 'N/A'}</td>
-              <td className="px-4 py-2">{facture.montantNet?.toFixed(2) ?? 'N/A'}</td>
-              <td className="px-4 py-2">{getStatutLabel(facture)}</td>
-              <td className="px-4 py-2 text-center">
-                <div className="flex justify-center items-center space-x-2">
-                  <EyeIcon
-                    className="h-5 w-5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
-                    onClick={() => handlePreview(facture)}
-                  />
-                  <ArrowDownTrayIcon
-                    className="h-5 w-5 text-green-400 hover:text-green-600 cursor-pointer"
-                    onClick={() => handleDownload(facture)}
-                  />
-
-                  {facture.status === 'unpaid' && !facture.locked && (
-                    <button
-                      onClick={() => handleMarkAsPaid(facture._id)}
-                      className="text-green-400 hover:text-green-600"
-                      title="Marquer payée"
-                    >
-                      <CheckIcon className="h-5 w-5" />
-                    </button>
-                  )}
-
-                  {!facture.locked && !facture.isRectification && (
-                    <button
-                      onClick={() => handleRectifyNew(facture)}
-                      className="text-yellow-400 hover:text-yellow-600"
-                      title="Rectifier cette facture"
-                    >
-                      <PencilIcon className="h-5 w-5" />
-                    </button>
-                  )}
-
-                  {!facture.locked && facture.status !== 'paid' && (
-                    <button
-                      onClick={() => handleDeleteFacture(facture._id)}
-                      className="text-red-400 hover:text-red-600"
-                      title="Supprimer la facture"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-
-  const GridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-      {factures.map((facture) => {
-        const displayDate = facture.dateEdition
-          ? format(new Date(facture.dateEdition), 'dd MMM yyyy', { locale: fr })
-          : format(new Date(facture.createdAt), 'dd MMM yyyy', { locale: fr });
-
-        return (
-          <div
-            key={facture._id}
-            className="bg-white/10 border border-white/10 p-4 rounded-md shadow-sm hover:bg-white/5"
-          >
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex flex-col items-start">
-                <h3 className="font-bold text-gray-100">
-                  Facture N°{facture.invoiceNumber}
-                </h3>
-                {(facture.isRectification || facture.statut === 'RECTIFIEE') && (
-                  <div className="mt-1">
+              N° Facture
+            </th>
+            <th
+              className="sticky top-0 px-3 py-2 text-center cursor-pointer border-b border-b-blue-700"
+              onClick={() => handleSort('date')}
+            >
+              Date
+            </th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">Client</th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">Brut (€)</th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">URSSAF (€)</th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">Net (€)</th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">Statut</th>
+            <th className="sticky top-0 px-3 py-2 text-center border-b border-b-blue-700">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {factures.map((facture, index) => {
+            const displayDate = facture.dateEdition
+              ? format(new Date(facture.dateEdition), 'dd/MM/yyyy', { locale: fr })
+              : format(new Date(facture.createdAt), 'dd/MM/yyyy', { locale: fr });
+  
+            // Déterminer si l'icône "créer un avoir" doit être affichée
+            const shouldShowCreateCreditNote = 
+              facture.status === 'paid' && 
+              (!facture.avoir || !facture.avoir.numero) && 
+              !facture.locked;
+  
+            return (
+              <tr
+                key={facture._id}
+                className={`hover:bg-blue-800/20 ${index % 2 === 0 ? 'bg-blue-900/10' : ''}`}
+              >
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30">
+                  <div className="flex items-center justify-center gap-2">
+                    {facture.invoiceNumber}
                     {facture.isRectification && (
                       <RectificationBadge type="rectification" />
                     )}
@@ -415,158 +535,345 @@ const FactureList = () => {
                       <RectificationBadge type="rectified" />
                     )}
                   </div>
-                )}
-                <p className="text-xs text-gray-300">{displayDate}</p>
-              </div>
-              {getStatutLabel(facture)}
-            </div>
-
-            <p className="font-medium text-center text-gray-100 mb-2">
-              {facture.client?.name || 'N/A'}
-            </p>
-            <p className="text-lg font-bold text-center mb-3 text-gray-50">
-              {facture.montantTTC ? `${facture.montantTTC.toFixed(2)} €` : 'N/A'}
-            </p>
-
-            <div className="flex justify-center space-x-3">
-              <EyeIcon
-                className="h-5 w-5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
-                onClick={() => handlePreview(facture)}
-              />
-              <ArrowDownTrayIcon
-                className="h-5 w-5 text-green-400 hover:text-green-600 cursor-pointer"
-                onClick={() => handleDownload(facture)}
-              />
-
-              {facture.status === 'unpaid' && !facture.locked && (
-                <button
-                  onClick={() => handleMarkAsPaid(facture._id)}
-                  className="text-green-400 hover:text-green-600"
-                  title="Marquer payée"
-                >
-                  <CheckIcon className="h-5 w-5" />
-                </button>
-              )}
-
-              {!facture.locked && !facture.isRectification && (
-                <button
-                  onClick={() => handleRectifyNew(facture)}
-                  className="text-yellow-400 hover:text-yellow-600"
-                  title="Rectifier cette facture"
-                >
-                  <PencilIcon className="h-5 w-5" />
-                </button>
-              )}
-
-              {!facture.locked && facture.status !== 'paid' && (
-                <button
-                  onClick={() => handleDeleteFacture(facture._id)}
-                  className="text-red-400 hover:text-red-600"
-                  title="Supprimer la facture"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+                </td>
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30">{displayDate}</td>
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30" title={facture.client?.name || 'N/A'}>
+                  {truncateText(facture.client?.name, 30)}
+                </td>
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30">
+                  {facture.montantHT?.toFixed(2) ?? 'N/A'}
+                </td>
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30">
+                  {facture.taxeURSSAF?.toFixed(2) ?? 'N/A'}
+                </td>
+                <td className="px-3 py-2.5 text-center border-b border-b-blue-800/30">
+                  {facture.montantNet?.toFixed(2) ?? 'N/A'}
+                </td>
+                <td className="px-3 py-2.5 border-b border-b-blue-800/30">
+                  <div className="flex justify-center">
+                    {getStatutLabel(facture)}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 border-b border-b-blue-800/30">
+                  <div className="flex justify-center items-center gap-2.5">
+                    {/* Actions toujours disponibles */}
+                    <button
+                      onClick={() => handlePreview(facture)}
+                      title="Prévisualiser"
+                      className="text-indigo-400 hover:text-indigo-300"
+                    >
+                      <EyeIcon className="h-5 w-5" />
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDownload(facture)}
+                      title="Télécharger"
+                      className="text-green-400 hover:text-green-300"
+                    >
+                      <ArrowDownTrayIcon className="h-5 w-5" />
+                    </button>
+                    
+                    {/* Actions pour les brouillons */}
+                    {facture.status === 'draft' && !facture.isSentToClient && !facture.locked && (
+                      <>
+                        <button
+                          onClick={() => handleMarkAsSent(facture._id)}
+                          title="Marquer comme envoyée au client"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          <PaperAirplaneIcon className="h-5 w-5" />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleDeleteFacture(facture._id)}
+                          title="Supprimer (uniquement avant envoi)"
+                          className="text-red-500 hover:text-red-400"
+                        >
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
+                      </>
+                    )}
+                    
+                    {/* Actions pour les factures envoyées mais non payées */}
+                    {facture.isSentToClient && facture.status === 'unpaid' && !facture.locked && (
+                      <>
+                        <button
+                          onClick={() => handleMarkAsPaid(facture._id)}
+                          title="Marquer payée"
+                          className="text-green-400 hover:text-green-300"
+                        >
+                          <CheckIcon className="h-5 w-5" />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleRectifyNew(facture)}
+                          title="Rectifier"
+                          className="text-yellow-400 hover:text-yellow-300"
+                        >
+                          <PencilIcon className="h-5 w-5" />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleCancelInvoice(facture)}
+                          title="Annuler"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <XCircleIcon className="h-5 w-5" />
+                        </button>
+                      </>
+                    )}
+                    
+                    {/* Créer un avoir - pour les factures payées sans avoir existant */}
+                    {shouldShowCreateCreditNote && (
+                      <button
+                        onClick={() => handleCreditNote(facture)}
+                        title="Créer un avoir"
+                        className="text-pink-400 hover:text-pink-300"
+                      >
+                        <DocumentTextIcon className="h-5 w-5" />
+                      </button>
+                    )}
+                    
+                    {/* Voir l'avoir si existant */}
+                    {facture.avoir && facture.avoir.numero && facture.avoir.montant && (
+                      <button 
+                        onClick={() => handlePreviewCreditNote(facture._id)}
+                        title="Voir l'avoir (PDF)"
+                        className="text-pink-400 hover:text-pink-300"
+                      >
+                        <ReceiptRefundIcon className="h-5 w-5" />
+                      </button>
+                    )}
+                    
+                    
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 
+  // -----------------------------------------------------------
+  // MAIN RENDER
+  // -----------------------------------------------------------
   return (
-    <div className="container mx-auto pt-20 px-6 pb-8 text-gray-100">
-      <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-6 space-y-6">
-        <h2 className="text-2xl font-semibold">Mes Factures</h2>
+    <div className="p-6 text-gray-100">
+      <h2 className="text-2xl font-semibold mb-4">Liste des Factures</h2>
 
-        {/* Filtres */}
-        <div className="flex flex-wrap items-center gap-4 bg-white/5 border border-white/10 rounded-md p-4">
-          {/* Choix du client */}
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
-              Client
-            </label>
-            <select
-              value={filters.client}
-              onChange={(e) => setFilters((prev) => ({ ...prev, client: e.target.value }))}
-              className="border rounded p-2 text-gray-900"
-            >
-              <option value="">Tous</option>
-              {clients.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Mois-année */}
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
-              Mois/Année
-            </label>
-            <DatePicker
-              selected={filters.selectedMonthYear}
-              onChange={(date) => setFilters((prev) => ({ ...prev, selectedMonthYear: date }))}
-              dateFormat="MMMM yyyy"
-              showMonthYearPicker
-              locale={fr}
-              placeholderText="Sélectionnez le mois/année"
-              className="border rounded p-2 text-gray-900"
-            />
-          </div>
-
-          {/* Statut */}
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
-              Statut
-            </label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-              className="border rounded p-2 text-gray-900"
-            >
-              <option value="">Tous les statuts</option>
-              <option value="unpaid">En attente</option>
-              <option value="paid">Payées</option>
-              <option value="overdue">En retard</option>
-            </select>
-          </div>
-
-          {/* Type de facture (nouveau filtre) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">
-              Type
-            </label>
-            <select
-              value={filters.type || ''}
-              onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
-              className="border rounded p-2 text-gray-900"
-            >
-              <option value="">Tous les types</option>
-              <option value="original">Factures originales</option>
-              <option value="rectification">Factures rectificatives</option>
-            </select>
-          </div>
-
-          {/* Bouton switch vue */}
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-              className="p-2 border rounded hover:bg-white/10 transition-colors"
-            >
-              {viewMode === 'list' ? <Squares2X2Icon className="h-5 w-5" /> : <Bars3Icon className="h-5 w-5" />}
-            </button>
-          </div>
+      {/* Filtres */}
+      <div className="bg-white/10 border border-white/20 rounded-md p-4 mb-4 flex flex-wrap gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Client</label>
+          <select
+            value={filters.client}
+            onChange={(e) => setFilters((prev) => ({ ...prev, client: e.target.value }))}
+            className="p-2 text-gray-900 rounded"
+          >
+            <option value="">Tous</option>
+            {clients.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Listing */}
-        <div className="bg-white/10 border border-white/10 rounded-md overflow-hidden">
-          {viewMode === 'list' ? <ListView /> : <GridView />}
+        <div>
+          <label className="block text-sm font-medium mb-1">Mois / Année</label>
+          <DatePicker
+            selected={filters.selectedMonthYear}
+            onChange={(date) => setFilters((prev) => ({ ...prev, selectedMonthYear: date }))}
+            dateFormat="MM/yyyy"
+            showMonthYearPicker
+            className="p-2 text-gray-900 rounded"
+            placeholderText="Choisir un mois / année"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Statut</label>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            className="p-2 text-gray-900 rounded"
+          >
+            <option value="">Tous</option>
+            <option value="draft">Brouillon</option>
+            <option value="unpaid">Non payée</option>
+            <option value="paid">Payée</option>
+            <option value="overdue">En retard</option>
+            <option value="cancelled">Annulée</option>
+          </select>
         </div>
       </div>
 
-      {/* MODAL : Preview PDF */}
+      {/* Choix d'affichage liste ou grille */}
+      <div className="mb-4 flex items-center justify-end space-x-2">
+        <Bars3Icon
+          className={`h-6 w-6 cursor-pointer ${viewMode === 'list' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-300'}`}
+          onClick={() => setViewMode('list')}
+        />
+        <Squares2X2Icon
+          className={`h-6 w-6 cursor-pointer ${viewMode === 'grid' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-300'}`}
+          onClick={() => setViewMode('grid')}
+        />
+      </div>
+
+      {/* Liste / Grille */}
+      {factures.length === 0 ? (
+        <div className="text-gray-400">Aucune facture trouvée.</div>
+      ) : viewMode === 'list' ? (
+        <ListView />
+      ) : (
+        /* Vue en grille améliorée */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {factures.map((facture) => {
+            const displayDate = facture.dateEdition
+              ? format(new Date(facture.dateEdition), 'dd/MM/yyyy', { locale: fr })
+              : format(new Date(facture.createdAt), 'dd/MM/yyyy', { locale: fr });
+
+            return (
+              <div
+                key={facture._id}
+                className="relative flex flex-col bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg overflow-hidden transition-all hover:shadow-xl hover:shadow-blue-900/20 hover:border-blue-400/30"
+              >
+                {/* Badges en position absolue */}
+                <div className="absolute top-0 right-0 flex gap-1 p-1">
+                  {facture.isRectification && <RectificationBadge type="rectification" />}
+                  {facture.statut === 'RECTIFIEE' && <RectificationBadge type="rectified" />}
+                  {facture.avoir && facture.avoir.numero && facture.avoir.montant && (
+                    <CreditNoteBadge montant={facture.avoir.montant} onClick={() => handleViewCreditNote(facture)} />
+                  )}
+                </div>
+
+                {/* En-tête avec n° facture et statut */}
+                <div className="bg-gradient-to-r from-blue-900/50 to-indigo-900/50 p-4 border-b border-white/10">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-white text-lg">
+                      #{facture.invoiceNumber}
+                    </span>
+                    <div>{getStatutLabel(facture)}</div>
+                  </div>
+                </div>
+
+                {/* Contenu principal */}
+                <div className="p-4 flex-grow flex flex-col">
+                  {/* Infos client & date */}
+                  <div className="mb-4">
+                    <div className="flex items-start mb-2">
+                      <UserIcon className="h-5 w-5 text-blue-300 mr-2 mt-0.5 flex-shrink-0" />
+                      <div className="text-base text-blue-100 font-medium" title={facture.client?.name || 'N/A'}>
+                        {truncateText(facture.client?.name, 40)}
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <CalendarIcon className="h-4 w-4 text-blue-300 mr-2 flex-shrink-0" />
+                      <div className="text-sm text-blue-200">{displayDate}</div>
+                    </div>
+                  </div>
+
+                  {/* Montants */}
+                  <div className="mb-4 grid grid-cols-2 gap-2 p-3 bg-blue-900/30 rounded-md">
+                    <div className="col-span-2 flex items-center mb-1">
+                      <CurrencyEuroIcon className="h-4 w-4 text-green-300 mr-2" />
+                      <span className="text-xs text-blue-300 uppercase font-semibold">Montants</span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-blue-300">Brut:</div>
+                      <div className="text-base font-medium">{facture.montantHT?.toFixed(2) ?? 'N/A'} €</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-blue-300">Net:</div>
+                      <div className="text-base font-medium">{facture.montantNet?.toFixed(2) ?? 'N/A'} €</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Barre d'actions */}
+                <div className="p-3 bg-gradient-to-r from-slate-800/50 to-slate-900/50 border-t border-white/10 flex flex-wrap justify-center gap-3">
+                  {/* Actions principales toujours visibles */}
+                  <EyeIcon
+                    className="h-5 w-5 text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                    onClick={() => handlePreview(facture)}
+                    title="Prévisualiser"
+                  />
+
+                  <ArrowDownTrayIcon
+                    className="h-5 w-5 text-green-400 hover:text-green-300 cursor-pointer"
+                    onClick={() => handleDownload(facture)}
+                    title="Télécharger"
+                  />
+
+                  {/* Actions pour les brouillons */}
+                  {facture.status === INVOICE_STATUS.DRAFT && !facture.isSentToClient && !facture.locked && (
+                    <>
+                      <PaperAirplaneIcon
+                        className="h-5 w-5 text-blue-400 hover:text-blue-300 cursor-pointer"
+                        onClick={() => handleMarkAsSent(facture._id)}
+                        title="Marquer comme envoyée au client"
+                      />
+
+                      <TrashIcon
+                        className="h-5 w-5 text-red-500 hover:text-red-400 cursor-pointer"
+                        onClick={() => handleDeleteFacture(facture._id)}
+                        title="Supprimer (uniquement avant envoi)"
+                      />
+                    </>
+                  )}
+
+                  {/* Actions pour les factures envoyées mais non payées */}
+                  {facture.isSentToClient && facture.status === INVOICE_STATUS.UNPAID && !facture.locked && (
+                    <>
+                      <CheckIcon
+                        className="h-5 w-5 text-green-400 hover:text-green-300 cursor-pointer"
+                        onClick={() => handleMarkAsPaid(facture._id)}
+                        title="Marquer payée"
+                      />
+
+                      <PencilIcon
+                        className="h-5 w-5 text-yellow-400 hover:text-yellow-300 cursor-pointer"
+                        onClick={() => handleRectifyNew(facture)}
+                        title="Rectifier"
+                      />
+
+                      <XCircleIcon
+                        className="h-5 w-5 text-red-400 hover:text-red-300 cursor-pointer"
+                        onClick={() => handleCancelInvoice(facture)}
+                        title="Annuler"
+                      />
+                    </>
+                  )}
+
+                  {/* Actions pour les factures payées */}
+                  {facture.status === INVOICE_STATUS.PAID && !facture.avoir && !facture.locked && (
+                    <DocumentTextIcon
+                      className="h-5 w-5 text-pink-400 hover:text-pink-300 cursor-pointer"
+                      onClick={() => handleCreditNote(facture)}
+                      title="Créer un avoir"
+                    />
+                  )}
+
+                  {/* Voir l'avoir si existant */}
+                  {facture.avoir && facture.status === 'paid' && (
+                    <ReceiptRefundIcon
+                      className="h-5 w-5 text-pink-400 hover:text-pink-300 cursor-pointer"
+                      onClick={() => handlePreviewCreditNote(facture._id)}
+                      title="Voir l'avoir"
+                    />
+                  )}
+
+                  
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modals */}
       <PDFPreviewModal
         isOpen={isPreviewModalOpen}
         onClose={() => setIsPreviewModalOpen(false)}
@@ -575,7 +882,6 @@ const FactureList = () => {
         onDownload={handleDownload}
       />
 
-      {/* MODAL : Payment */}
       <PaymentModal
         isOpen={isPaymentModalOpenPaymentList}
         onClose={() => setIsPaymentModalOpenPaymentList(false)}
@@ -584,507 +890,77 @@ const FactureList = () => {
 
       <RectificationIntroModal
         isOpen={isRectificationModalOpen}
-        onClose={() => {
-          setIsRectificationModalOpen(false);
-          setSelectedFactureForRectification(null);
-        }}
+        onClose={() => setIsRectificationModalOpen(false)}
         invoiceNumber={selectedFactureForRectification?.invoiceNumber}
         factureId={selectedFactureForRectification?._id}
       />
-    </div>
-  );
-};
 
-export default FactureList;
+      <CancelInvoiceModal
+        isOpen={isCancelModalOpen}
+        onClose={() => setIsCancelModalOpen(false)}
+        onSubmit={handleCancelSubmit}
+        facture={selectedInvoiceForCancel}
+      />
 
+      <CreditNoteModal
+        isOpen={isCreditNoteModalOpen}
+        onClose={() => setIsCreditNoteModalOpen(false)}
+        onSubmit={handleCreditNoteSubmit}
+        facture={selectedInvoiceForCreditNote}
+      />
 
-
-
-
-
-/*
-import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { toast } from 'react-toastify';
-import { Link } from 'react-router-dom';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import PDFPreviewModal from './PDFPreviewModal';
-import PaymentModal from './PaymentModal';
-
-// Import Heroicons
-import {
-  EyeIcon,
-  ArrowDownTrayIcon,
-  TrashIcon,
-  Squares2X2Icon,
-  Bars3Icon,
-  CheckIcon,
-} from '@heroicons/react/24/outline';
-
-const FactureList = () => {
-  const [filteredFactures, setFilteredFactures] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [selectedFacture, setSelectedFacture] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState('');
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState('list');
-  const [filters, setFilters] = useState({
-    client: '',
-    selectedMonthYear: null,
-    status: '',
-  });
-  const [sortConfig, setSortConfig] = useState({
-    key: 'date',
-    direction: 'desc',
-  });
-  const [isPaymentModalOpenPaymentList, setIsPaymentModalOpenPaymentList] = useState(false);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
-
-  const truncateText = (text, maxLength) =>
-    text && text.length > maxLength ? text.substring(0, maxLength) + '...' : text || '';
-
-  // Fonction pour afficher le statut
-  const getStatutLabel = (facture) => {
-    switch (facture.status) {
-      case 'paid':
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-green-500 text-white">
-            Payée
-          </span>
-        );
-      case 'overdue':
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-red-500 text-white">
-            En retard
-          </span>
-        );
-      default:
-        return (
-          <span className="px-2 py-1 rounded-full text-xs bg-orange-500 text-white">
-            En attente
-          </span>
-        );
-    }
-  };
-
-  // Fetch Factures
-  const fetchFactures = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const params = {};
-      if (filters.selectedMonthYear) {
-        const year = filters.selectedMonthYear.getFullYear();
-        const month = filters.selectedMonthYear.getMonth() + 1;
-        params.year = year;
-        params.month = month;
-      }
-      if (filters.client) params.clientId = filters.client;
-      if (filters.status) params.status = filters.status;
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/factures`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      });
-      setFilteredFactures(response.data);
-    } catch (error) {
-      console.error('Erreur lors du chargement des factures :', error);
-      toast.error('Erreur lors du chargement des factures');
-    }
-  }, [filters]);
-
-  // Fetch Clients
-  const fetchClients = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const resp = await axios.get(`${process.env.REACT_APP_API_URL}/api/clients`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setClients(resp.data);
-    } catch (error) {
-      console.error('Erreur lors de la récupération des clients :', error);
-      toast.error('Erreur lors de la récupération des clients');
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchFactures();
-    fetchClients();
-  }, [fetchFactures, fetchClients]);
-
-  // Tri
-  const handleSort = (key) => {
-    const direction =
-      sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
-    setSortConfig({ key, direction });
-    const sorted = [...filteredFactures].sort((a, b) => {
-      if (key === 'date') {
-        return direction === 'asc'
-          ? new Date(a.createdAt) - new Date(b.createdAt)
-          : new Date(b.createdAt) - new Date(a.createdAt);
-      }
-      if (key === 'invoiceNumber') {
-        return direction === 'asc'
-          ? a.invoiceNumber.localeCompare(b.invoiceNumber)
-          : b.invoiceNumber.localeCompare(a.invoiceNumber);
-      }
-      return 0;
-    });
-    setFilteredFactures(sorted);
-  };
-
-  // Marquer comme payée
-  const handleMarkAsPaid = (invoiceId) => {
-    setSelectedInvoiceId(invoiceId);
-    setIsPaymentModalOpenPaymentList(true);
-  };
-
-  // Payment submit
-  const handlePaymentSubmit = async (paymentData) => {
-    try {
-      const token = localStorage.getItem('token');
-      toast.info('Enregistrement du paiement...', { autoClose: 1500 });
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceId}/paiement`,
-        paymentData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      await fetchFactures();
-      setIsPaymentModalOpenPaymentList(false);
-      toast.success('Paiement enregistré avec succès');
-    } catch (error) {
-      console.error('Erreur paiement:', error);
-      toast.error("Erreur lors de l'enregistrement du paiement");
-    }
-  };
-
-  // Prévisualiser PDF
-  const handlePreview = async (facture) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          responseType: 'blob',
-        }
-      );
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      setPdfUrl(url);
-      setSelectedFacture(facture);
-      setIsPreviewModalOpen(true);
-    } catch (error) {
-      console.error('Erreur lors de la prévisualisation :', error);
-      toast.error('Erreur lors de la prévisualisation');
-    }
-  };
-
-  // Télécharger PDF
-  const handleDownload = async (facture) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/factures/${facture._id}/pdf`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!response.ok) throw new Error('Erreur PDF');
-      const pdfBlob = await response.blob();
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      const clientName = (facture.client && facture.client.name) || facture.client;
-      const fileName = `Facture_${clientName}_${format(
-        new Date(facture.dateFacture),
-        'MMMM_yyyy',
-        { locale: fr }
-      ).toLowerCase()}.pdf`;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(pdfUrl);
-    } catch (error) {
-      toast.error('Erreur lors du téléchargement du PDF');
-    }
-  };
-
-  // Supprimer facture
-  const handleDeleteFacture = async (factureId) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Session expirée');
-        return;
-      }
-      const confirmDelete = window.confirm('Voulez-vous vraiment supprimer cette facture ?');
-      if (!confirmDelete) return;
-      await axios.delete(`${process.env.REACT_APP_API_URL}/api/factures/${factureId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success('Facture supprimée');
-      setFilteredFactures((prev) =>
-        prev.filter((facture) => facture._id !== factureId)
-      );
-    } catch (error) {
-      console.error('Erreur lors de la suppression de la facture :', error);
-      toast.error('Erreur lors de la suppression');
-    }
-  };
-
-  // --- ListView ---
-  const ListView = () => (
-    <table className="min-w-full text-sm">
-      <thead className="bg-white/20 text-gray-100">
-        <tr>
-          <th className="px-4 py-2 text-left cursor-pointer" onClick={() => handleSort('invoiceNumber')}>
-            N° Facture
-          </th>
-          <th className="px-4 py-2 text-left cursor-pointer" onClick={() => handleSort('date')}>
-            Date
-          </th>
-          <th className="px-4 py-2 text-left">Client</th>
-          <th className="px-4 py-2 text-left">Brut (€)</th>
-          <th className="px-4 py-2 text-left">URSSAF (€)</th>
-          <th className="px-4 py-2 text-left">Net (€)</th>
-          <th className="px-4 py-2 text-left">Statut</th>
-          <th className="px-4 py-2 text-center">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {filteredFactures.map((facture) => (
-          <tr key={facture._id} className="border-b border-white/10 hover:bg-white/5">
-            <td className="px-4 py-2">{facture.invoiceNumber}</td>
-            <td className="px-4 py-2">
-              {facture.dateEdition
-                ? format(new Date(facture.dateEdition), 'dd/MM/yyyy', { locale: fr })
-                : format(new Date(facture.createdAt), 'dd/MM/yyyy', { locale: fr })}
-            </td>
-            <td className="px-4 py-2 w-68" title={facture.client?.name || 'N/A'}>
-              {truncateText(facture.client?.name, 60)}
-            </td>
-            <td className="px-4 py-2">{facture.montantHT?.toFixed(2) ?? 'N/A'}</td>
-            <td className="px-4 py-2">{facture.taxeURSSAF?.toFixed(2) ?? 'N/A'}</td>
-            <td className="px-4 py-2">{facture.montantNet?.toFixed(2) ?? 'N/A'}</td>
-            <td className="px-4 py-2">{getStatutLabel(facture)}</td>
-            <td className="px-4 py-2 text-center">
-              <div className="flex justify-center items-center space-x-2">
-                <EyeIcon
-                  className="h-5 w-5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
-                  onClick={() => handlePreview(facture)}
-                />
-                <ArrowDownTrayIcon
-                  className="h-5 w-5 text-green-400 hover:text-green-600 cursor-pointer"
-                  onClick={() => handleDownload(facture)}
-                />
-                {facture.status === 'unpaid' && (
-                  <>
-                    <button
-                      onClick={() => handleMarkAsPaid(facture._id)}
-                      className="text-green-400 hover:text-green-600"
-                      title="Marquer payée"
-                    >
-                      <CheckIcon className="h-5 w-5" />
-                    </button>
-                    <Link
-                      to={`/rectify-facture/${facture._id}`}
-                      className="text-yellow-400 hover:text-yellow-600"
-                      title="Rectifier"
-                    >
-                      Rectifier
-                    </Link>
-                    <button
-                      onClick={() => handleDeleteFacture(facture._id)}
-                      className="text-red-400 hover:text-red-600"
-                      title="Supprimer"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-
-  // --- GridView ---
-  const GridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-      {filteredFactures.map((facture) => (
-        <div
-          key={facture._id}
-          className="bg-white/10 border border-white/10 p-4 rounded-md shadow-sm hover:bg-white/5"
-        >
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <h3 className="font-bold text-gray-100">
-                Facture N°{facture.invoiceNumber}
-              </h3>
-              <p className="text-xs text-gray-300">
-                {facture.dateEdition
-                  ? format(new Date(facture.dateEdition), 'dd MMM yyyy', { locale: fr })
-                  : format(new Date(facture.createdAt), 'dd MMM yyyy', { locale: fr })}
-              </p>
+      {/* Détails de l'avoir déjà existant */}
+      {isCreditNoteDetailModalOpen && selectedCreditNote && (
+        <div className="fixed inset-0 z-[1000] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl max-w-md w-full">
+            <div className="p-5 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white">Détails de l'avoir</h3>
             </div>
-            <span className={`px-2 py-1 rounded-full text-xs text-white ${
-              facture.status === 'paid'
-                ? 'bg-green-500'
-                : facture.status === 'overdue'
-                  ? 'bg-red-500'
-                  : 'bg-orange-500'
-            }`}>
-              {facture.status === 'paid'
-                ? 'Payée'
-                : facture.status === 'overdue'
-                  ? 'En retard'
-                  : 'En attente'}
-            </span>
-          </div>
-          <p className="font-medium text-center text-gray-100 mb-2">
-            {facture.client?.name || 'N/A'}
-          </p>
-          <p className="text-lg font-bold text-center mb-3 text-gray-50">
-            {facture.montantTTC ? `${facture.montantTTC.toFixed(2)} €` : 'N/A'}
-          </p>
-          <div className="flex justify-center space-x-3">
-            <EyeIcon
-              className="h-5 w-5 text-indigo-400 hover:text-indigo-600 cursor-pointer"
-              onClick={() => handlePreview(facture)}
-            />
-            <ArrowDownTrayIcon
-              className="h-5 w-5 text-green-400 hover:text-green-600 cursor-pointer"
-              onClick={() => handleDownload(facture)}
-            />
-            {facture.status === 'unpaid' && (
-              <>
-                <button
-                  onClick={() => handleMarkAsPaid(facture._id)}
-                  className="text-green-400 hover:text-green-600 text-xs font-semibold"
-                  title="Marquer payée"
-                >
-                  <CheckIcon className="h-5 w-5" />
-                </button>
-                <Link
-                  to={`/rectify-facture/${facture._id}`}
-                  className="text-yellow-400 hover:text-yellow-600 text-xs font-semibold"
-                  title="Rectifier"
-                >
-                  Rectifier
-                </Link>
-                <button
-                  onClick={() => handleDeleteFacture(facture._id)}
-                  className="text-red-400 hover:text-red-600"
-                  title="Supprimer"
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="container mx-auto pt-34 px-6 pb-8 text-gray-100">
-      <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-6 space-y-6">
-        <h2 className="text-2xl font-semibold">Mes Factures</h2>
-
-        
-        <div className="bg-white/5 border border-white/10 rounded-md p-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <select
-              value={filters.client}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, client: e.target.value }))
-              }
-              className="bg-slate-50 border border-gray-300 rounded-md p-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="">Tous les clients</option>
-              {clients.map((client) => (
-                <option key={client._id} value={client._id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
-
-            <DatePicker
-              selected={filters.selectedMonthYear}
-              onChange={(date) =>
-                setFilters((prev) => ({ ...prev, selectedMonthYear: date }))
-              }
-              dateFormat="MMMM yyyy"
-              showMonthYearPicker
-              locale={fr}
-              placeholderText="Sélectionner un mois/année"
-              className="bg-slate-50 border border-gray-300 rounded-md p-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 w-full"
-            />
-
-            <select
-              value={filters.status}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, status: e.target.value }))
-              }
-              className="bg-slate-50 border border-gray-300 rounded-md p-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              <option value="">Tous les statuts</option>
-              <option value="unpaid">En attente</option>
-              <option value="paid">Payées</option>
-              <option value="overdue">En retard</option>
-            </select>
-
-            <div className="flex justify-end md:col-span-2">
+            <div className="p-5 space-y-4">
+              <div>
+                <div className="text-white/70 text-sm">Numéro d'avoir</div>
+                <div className="text-white text-lg font-medium">{selectedCreditNote.avoir.numero}</div>
+              </div>
+              <div>
+                <div className="text-white/70 text-sm">Montant</div>
+                <div className="text-pink-300 text-lg font-bold">{selectedCreditNote.avoir.montant.toFixed(2)} €</div>
+              </div>
+              <div>
+                <div className="text-white/70 text-sm">Motif</div>
+                <div className="text-white">{selectedCreditNote.avoir.motif}</div>
+              </div>
+              {selectedCreditNote.avoir.remboursement && (
+                <>
+                  <div>
+                    <div className="text-white/70 text-sm">Remboursement</div>
+                    <div className="text-white">
+                      {selectedCreditNote.avoir.methodePaiement || 'Non spécifié'}
+                    </div>
+                  </div>
+                  {selectedCreditNote.avoir.dateRemboursement && (
+                    <div>
+                      <div className="text-white/70 text-sm">Date de remboursement</div>
+                      <div className="text-white">
+                        {format(new Date(selectedCreditNote.avoir.dateRemboursement), 'dd/MM/yyyy', { locale: fr })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="p-5 border-t border-white/10 flex justify-end">
               <button
-                onClick={() =>
-                  setViewMode((prev) => (prev === 'list' ? 'grid' : 'list'))
-                }
-                className="px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition-colors"
+                onClick={() => setIsCreditNoteDetailModalOpen(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
               >
-                {viewMode === 'list' ? (
-                  <Squares2X2Icon className="h-5 w-5" />
-                ) : (
-                  <Bars3Icon className="h-5 w-5" />
-                )}
+                Fermer
               </button>
             </div>
           </div>
         </div>
-
-        
-        <div className="bg-white/10 border border-white/10 rounded-md p-4">
-          {filteredFactures.length === 0 ? (
-            <p className="text-sm text-gray-200">Aucune facture disponible.</p>
-          ) : viewMode === 'list' ? (
-            <div className="overflow-x-auto">
-              <ListView />
-            </div>
-          ) : (
-            <GridView />
-          )}
-        </div>
-
-        
-        <PDFPreviewModal
-          isOpen={isPreviewModalOpen}
-          onClose={() => setIsPreviewModalOpen(false)}
-          pdfUrl={pdfUrl}
-          facture={selectedFacture}
-          onDownload={handleDownload}
-        />
-      </div>
+      )}
     </div>
   );
 };
 
 export default FactureList;
-*/

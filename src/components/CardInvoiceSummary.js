@@ -1,4 +1,4 @@
-// frontend/src/components/CardInvoiceSummary.js
+
 import React from 'react';
 
 const CardInvoiceSummary = ({ title, value, unit, bgColor, textColor }) => {
