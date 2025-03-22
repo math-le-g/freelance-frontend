@@ -236,8 +236,8 @@ const InvoiceCreator = ({ clients, businessInfo }) => {
           w-full py-2 px-4 rounded-md font-semibold transition-colors
           ${
             isDisabled
-              ? 'bg-gray-500 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 text-white'
+              ? 'bg-gray-500/50 text-gray-300 cursor-not-allowed'
+              : 'bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white'
           }
         `}
       >

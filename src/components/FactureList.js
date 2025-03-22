@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { usePrestation } from '../contexts/PrestationContext';
 
 import RectificationIntroModal from './RectificationIntroModal';
 import RectificationBadge from './RectificationBadge';
@@ -39,6 +40,7 @@ import {
 
 const FactureList = () => {
   const navigate = useNavigate();
+  const { fetchPrestations } = usePrestation();
 
   // Données
   const [factures, setFactures] = useState([]);
@@ -102,7 +104,7 @@ const FactureList = () => {
       />
     );
   };
-  
+
 
   const handleViewCreditNote = (facture) => {
     if (facture.avoir) {
@@ -351,7 +353,13 @@ const FactureList = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success('Facture supprimée');
+
+      // 1) Mise à jour locale de la liste des factures
       setFactures((prev) => prev.filter((f) => f._id !== factureId));
+      // 2) Recharger la liste des prestations pour que
+      // le “Récap Mensuel” répercute la suppression (invoiceStatus=null)
+      await fetchPrestations();
+
     } catch (error) {
       console.error('Erreur suppression facture :', error);
       toast.error('Erreur lors de la suppression');
@@ -414,52 +422,52 @@ const FactureList = () => {
       toast.info('Création de l\'avoir en cours.', { autoClose: 1500 });
 
       // Vérifier d'abord si la facture a déjà un avoir valide
-    const factureToCheck = factures.find(f => f._id === selectedInvoiceForCreditNote._id);
-    const hasValidCreditNote = factureToCheck?.avoir && 
-                              factureToCheck.avoir.numero && 
-                              factureToCheck.avoir.montant;
-    
-    if (hasValidCreditNote) {
-      toast.error(`Cette facture a déjà un avoir (${factureToCheck.avoir.numero})`);
-      setIsCreditNoteModalOpen(false);
-      return;
-    }
+      const factureToCheck = factures.find(f => f._id === selectedInvoiceForCreditNote._id);
+      const hasValidCreditNote = factureToCheck?.avoir &&
+        factureToCheck.avoir.numero &&
+        factureToCheck.avoir.montant;
 
-    const response = await axios.post(
-      `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceForCreditNote._id}/credit-note`,
-      creditNoteData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      if (hasValidCreditNote) {
+        toast.error(`Cette facture a déjà un avoir (${factureToCheck.avoir.numero})`);
+        setIsCreditNoteModalOpen(false);
+        return;
       }
-    );
 
-    if (response.data.success) {
-      await fetchFactures();
-      setIsCreditNoteModalOpen(false);
-      toast.success(`Avoir ${response.data.avoir.numero} créé avec succès`);
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/factures/${selectedInvoiceForCreditNote._id}/credit-note`,
+        creditNoteData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      // Rechargement après un délai pour s'assurer que l'UI est à jour
-      setTimeout(async () => {
+      if (response.data.success) {
         await fetchFactures();
-      }, 1000);
-    } else {
-      throw new Error(response.data.message || 'Erreur lors de la création de l\'avoir');
-    }
-  } catch (error) {
-    console.error('Erreur création avoir:', error);
+        setIsCreditNoteModalOpen(false);
+        toast.success(`Avoir ${response.data.avoir.numero} créé avec succès`);
 
-    let errorMsg = 'Erreur lors de la création de l\'avoir';
-    if (error.response) {
-      console.log('Détails de l\'erreur:', error.response);
-      errorMsg = error.response.data?.message || errorMsg;
-    }
+        // Rechargement après un délai pour s'assurer que l'UI est à jour
+        setTimeout(async () => {
+          await fetchFactures();
+        }, 1000);
+      } else {
+        throw new Error(response.data.message || 'Erreur lors de la création de l\'avoir');
+      }
+    } catch (error) {
+      console.error('Erreur création avoir:', error);
 
-    toast.error(errorMsg);
-  }
-};
+      let errorMsg = 'Erreur lors de la création de l\'avoir';
+      if (error.response) {
+        console.log('Détails de l\'erreur:', error.response);
+        errorMsg = error.response.data?.message || errorMsg;
+      }
+
+      toast.error(errorMsg);
+    }
+  };
 
   async function handlePreviewCreditNote(factureId) {
     try {
@@ -513,13 +521,13 @@ const FactureList = () => {
             const displayDate = facture.dateEdition
               ? format(new Date(facture.dateEdition), 'dd/MM/yyyy', { locale: fr })
               : format(new Date(facture.createdAt), 'dd/MM/yyyy', { locale: fr });
-  
+
             // Déterminer si l'icône "créer un avoir" doit être affichée
-            const shouldShowCreateCreditNote = 
-              facture.status === 'paid' && 
-              (!facture.avoir || !facture.avoir.numero) && 
+            const shouldShowCreateCreditNote =
+              facture.status === 'paid' &&
+              (!facture.avoir || !facture.avoir.numero) &&
               !facture.locked;
-  
+
             return (
               <tr
                 key={facture._id}
@@ -564,7 +572,7 @@ const FactureList = () => {
                     >
                       <EyeIcon className="h-5 w-5" />
                     </button>
-                    
+
                     <button
                       onClick={() => handleDownload(facture)}
                       title="Télécharger"
@@ -572,7 +580,7 @@ const FactureList = () => {
                     >
                       <ArrowDownTrayIcon className="h-5 w-5" />
                     </button>
-                    
+
                     {/* Actions pour les brouillons */}
                     {facture.status === 'draft' && !facture.isSentToClient && !facture.locked && (
                       <>
@@ -583,17 +591,19 @@ const FactureList = () => {
                         >
                           <PaperAirplaneIcon className="h-5 w-5" />
                         </button>
-                        
-                        <button
-                          onClick={() => handleDeleteFacture(facture._id)}
-                          title="Supprimer (uniquement avant envoi)"
-                          className="text-red-500 hover:text-red-400"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
+
+                        {!facture.isRectification && (
+                          <button
+                            onClick={() => handleDeleteFacture(facture._id)}
+                            title="Supprimer (uniquement avant envoi)"
+                            className="text-red-500 hover:text-red-400"
+                          >
+                            <TrashIcon className="h-5 w-5" />
+                          </button>
+                        )}
                       </>
                     )}
-                    
+
                     {/* Actions pour les factures envoyées mais non payées */}
                     {facture.isSentToClient && facture.status === 'unpaid' && !facture.locked && (
                       <>
@@ -604,7 +614,7 @@ const FactureList = () => {
                         >
                           <CheckIcon className="h-5 w-5" />
                         </button>
-                        
+
                         <button
                           onClick={() => handleRectifyNew(facture)}
                           title="Rectifier"
@@ -612,7 +622,7 @@ const FactureList = () => {
                         >
                           <PencilIcon className="h-5 w-5" />
                         </button>
-                        
+
                         <button
                           onClick={() => handleCancelInvoice(facture)}
                           title="Annuler"
@@ -622,7 +632,7 @@ const FactureList = () => {
                         </button>
                       </>
                     )}
-                    
+
                     {/* Créer un avoir - pour les factures payées sans avoir existant */}
                     {shouldShowCreateCreditNote && (
                       <button
@@ -633,10 +643,10 @@ const FactureList = () => {
                         <DocumentTextIcon className="h-5 w-5" />
                       </button>
                     )}
-                    
+
                     {/* Voir l'avoir si existant */}
                     {facture.avoir && facture.avoir.numero && facture.avoir.montant && (
-                      <button 
+                      <button
                         onClick={() => handlePreviewCreditNote(facture._id)}
                         title="Voir l'avoir (PDF)"
                         className="text-pink-400 hover:text-pink-300"
@@ -644,8 +654,8 @@ const FactureList = () => {
                         <ReceiptRefundIcon className="h-5 w-5" />
                       </button>
                     )}
-                    
-                    
+
+
                   </div>
                 </td>
               </tr>
@@ -865,7 +875,7 @@ const FactureList = () => {
                     />
                   )}
 
-                  
+
                 </div>
               </div>
             );

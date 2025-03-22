@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { usePrestation } from '../contexts/PrestationContext';
 import {
   ArrowLeftIcon,
   DocumentDuplicateIcon,
@@ -64,6 +65,7 @@ const MOTIFS_LEGAUX = [
 export default function RectificationForm() {
   const { id } = useParams();  // ID de la facture à rectifier
   const navigate = useNavigate();
+  const { fetchPrestations } = usePrestation();
 
   // Facture d’origine
   const [originalFacture, setOriginalFacture] = useState(null);
@@ -282,6 +284,9 @@ export default function RectificationForm() {
         body,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      await fetchPrestations();
+      console.log('[DEBUG] useQuery Prestations =', prestations);
 
       toast.success('Facture rectificative créée avec succès !');
       navigate('/mes-factures');

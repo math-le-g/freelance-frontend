@@ -1,24 +1,49 @@
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react';
 import axios from '../utils/axios-config';
 import { useInvoice } from '../contexts/InvoiceContext';
 import { toast } from 'react-toastify';
+import {
+  CogIcon,
+  DocumentTextIcon,
+  PaintBrushIcon,
+  BellAlertIcon,
+  ClockIcon,
+  ChatBubbleLeftRightIcon,
+  CurrencyEuroIcon,
+  ArrowPathIcon
+} from '@heroicons/react/24/outline';
 
-const ParametresFacturation = () => {
+function ParametresFacturation() {
   const { fetchNextInvoiceNumber } = useInvoice();
 
-  // États pour les réglages spécifiques de facturation
+  const [activeTab, setActiveTab] = useState('facturation');
+
+  // -----------------------
+  // États "Facturation"
+  // -----------------------
   const [invoiceTitle, setInvoiceTitle] = useState('');
   const [invoiceNumberStart, setInvoiceNumberStart] = useState('');
-  const [currentInvoiceNumber, setCurrentInvoiceNumber] = useState('');
   const [previousInvoiceNumberStart, setPreviousInvoiceNumberStart] = useState('');
+  const [currentInvoiceNumber, setCurrentInvoiceNumber] = useState('');
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState(0);
+  const [errors, setErrors] = useState({});
 
-  // États pour les fonctionnalités (paiement et rappels)
+  // URSSAF
+  const [taxeURSSAF, setTaxeURSSAF] = useState(0.246);
+
+  // TVA
+  const [soumisTVA, setSoumisTVA] = useState(false);
+  const [tauxTVA, setTauxTVA] = useState(0);
+
+  // Délai de paiement
   const [invoiceStatus, setInvoiceStatus] = useState({
     enabled: false,
     paymentDelay: 30,
   });
 
+  // -----------------------
+  // Onglet "Rappels"
+  // -----------------------
   const [reminders, setReminders] = useState({
     enabled: false,
     firstReminder: 7,
@@ -26,453 +51,620 @@ const ParametresFacturation = () => {
     thirdReminder: 30,
   });
 
-  // États pour les options d'affichage
+  // -----------------------
+  // Onglet "PDF & Messages"
+  // -----------------------
   const [displayOptions, setDisplayOptions] = useState({
     showDueDateOnInvoice: true,
     showDueDateInHistory: true,
-    // Par défaut, si l'entreprise n'est pas soumise à la TVA, on peut afficher la mention
     showTvaComment: true,
   });
+  const [legalMessages, setLegalMessages] = useState({
+    enableLatePaymentComment: false,
+    latePaymentText: "Par défaut, indemnité 40 € en cas de retard (art. L441-10 Code commerce).",
+    enableCustomComment: false,
+    customCommentText: "",
+  });
 
-  // Nouvel état pour indiquer si l'entreprise est soumise à la TVA
-  const [soumisTVA, setSoumisTVA] = useState(false);
-
-  // État pour stocker l'objet complet d'informations d'entreprise
-  const [businessInfo, setBusinessInfo] = useState({});
-
+  // -----------------------
+  // Chargement initial
+  // -----------------------
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const token = localStorage.getItem('token');
-        const config = {
-          headers: { Authorization: `Bearer ${token}` },
-        };
+        const config = { headers: { Authorization: `Bearer ${token}` } };
 
-        // Récupérer les paramètres spécifiques
-        console.log('Envoi de la requête GET /invoice-settings');
-        const settingsResponse = await axios.get('/invoice-settings', config);
-        console.log('Réponse de la requête GET /invoice-settings:', settingsResponse);
-        const invoiceNumberStartValue = settingsResponse.data.invoiceNumberStart || '';
-        setInvoiceTitle(settingsResponse.data.invoiceTitle || '');
-        setInvoiceNumberStart(invoiceNumberStartValue);
-        setCurrentInvoiceNumber(settingsResponse.data.currentInvoiceNumber || '');
-        setPreviousInvoiceNumberStart(invoiceNumberStartValue);
+        // GET /invoice-settings
+        const settingsResp = await axios.get('/invoice-settings', config);
+        const dataSet = settingsResp.data || {};
+        setInvoiceTitle(dataSet.invoiceTitle || '');
+        setInvoiceNumberStart(dataSet.invoiceNumberStart || '');
+        setCurrentInvoiceNumber(dataSet.currentInvoiceNumber || '');
+        setPreviousInvoiceNumberStart(dataSet.invoiceNumberStart || '');
 
-        // Récupérer le dernier numéro de facture émis
-        console.log('Envoi de la requête GET /invoice-settings/last-number');
-        const lastNumberResponse = await axios.get('/invoice-settings/last-number', config);
-        console.log('Réponse de la requête GET /invoice-settings/last-number:', lastNumberResponse);
-        setLastInvoiceNumber(lastNumberResponse.data.lastInvoiceNumber || 0);
+        // GET /invoice-settings/last-number
+        const lastNumResp = await axios.get('/invoice-settings/last-number', config);
+        setLastInvoiceNumber(lastNumResp.data.lastInvoiceNumber || 0);
 
-        // Récupérer les informations d'entreprise complètes
-        console.log('Envoi de la requête GET /business-info');
-        const businessInfoResponse = await axios.get('/business-info', config);
-        console.log('Réponse de la requête GET /business-info:', businessInfoResponse);
-        const info = businessInfoResponse.data || {};
-        setBusinessInfo(info);
+        // GET /business-info
+        const bizResp = await axios.get('/business-info', config);
+        const biz = bizResp.data || {};
 
-        // Initialiser les options d'affichage à partir de l'objet récupéré
-        setDisplayOptions({
-          showDueDateOnInvoice: info.displayOptions?.showDueDateOnInvoice ?? true,
-          showDueDateInHistory: info.displayOptions?.showDueDateInHistory ?? true,
-          showTvaComment: info.displayOptions?.showTvaComment ?? true,
+        // Facturation
+        setTauxTVA(biz.tauxTVA || 0);
+        setTaxeURSSAF(biz.taxeURSSAF || 0.246);
+        setSoumisTVA((biz.tauxTVA || 0) > 0);
+
+        // Features
+        const invStatus = biz.features?.invoiceStatus || {};
+        setInvoiceStatus({
+          enabled: invStatus.enabled ?? false,
+          paymentDelay: invStatus.paymentDelay ?? 30,
         });
 
-        // Initialiser "soumisTVA" selon le taux de TVA (si > 0, alors true)
-        setSoumisTVA(info.tauxTVA > 0);
-      } catch (error) {
-        console.error('Erreur lors de la récupération des paramètres', error);
-        toast.error('Erreur lors de la récupération des paramètres de facturation.');
+        // Rappels
+        const autoReminders = biz.features?.automaticReminders || {};
+        setReminders({
+          enabled: autoReminders.enabled ?? false,
+          firstReminder: autoReminders.firstReminder ?? 7,
+          secondReminder: autoReminders.secondReminder ?? 15,
+          thirdReminder: autoReminders.thirdReminder ?? 30,
+        });
+
+        // Display
+        setDisplayOptions({
+          showDueDateOnInvoice: biz.displayOptions?.showDueDateOnInvoice ?? true,
+          showDueDateInHistory: biz.displayOptions?.showDueDateInHistory ?? true,
+          showTvaComment: biz.displayOptions?.showTvaComment ?? true,
+        });
+
+        // Messages
+        setLegalMessages({
+          enableLatePaymentComment: biz.legalMessages?.enableLatePaymentComment ?? false,
+          latePaymentText: biz.legalMessages?.latePaymentText || "Tout retard de paiement = indemnité forfaitaire de 40 €.",
+          enableCustomComment: biz.legalMessages?.enableCustomComment ?? false,
+          customCommentText: biz.legalMessages?.customCommentText || "",
+        });
+
+      } catch (err) {
+        console.error('Erreur fetch settings:', err);
+        toast.error('Erreur récupération paramètres.');
       }
     };
-
     fetchSettings();
-  }, []);
+  }, [fetchNextInvoiceNumber]);
+
+  // -----------------------
+  // Validation et Submit
+  // -----------------------
+  const validateForm = () => {
+    const newErrors = {};
+    const intStart = parseInt(invoiceNumberStart || '0', 10);
+
+    if (isNaN(intStart) || intStart <= 0) {
+      newErrors.invoiceNumberStart = 'Numéro de départ invalide.';
+    }
+    if (intStart <= lastInvoiceNumber) {
+      newErrors.invoiceNumberStart = `Doit être > dernier numéro émis (${lastInvoiceNumber}).`;
+    }
+    if (invoiceStatus.enabled) {
+      if (isNaN(invoiceStatus.paymentDelay) || invoiceStatus.paymentDelay <= 0) {
+        newErrors.paymentDelay = 'Délai paiement invalide.';
+      }
+    }
+    if (reminders.enabled) {
+      if (reminders.firstReminder < 1) {
+        newErrors.firstReminder = 'Premier rappel: min 1j.';
+      }
+      if (reminders.secondReminder <= reminders.firstReminder) {
+        newErrors.secondReminder = 'Second rappel > premier.';
+      }
+      if (reminders.thirdReminder <= reminders.secondReminder) {
+        newErrors.thirdReminder = 'Troisième rappel > second.';
+      }
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateForm()) {
+      toast.error('Corrigez les erreurs avant de sauvegarder.');
+      return;
+    }
 
-    const invoiceNumberStartInt = parseInt(invoiceNumberStart || '0', 10);
-    if (isNaN(invoiceNumberStartInt) || invoiceNumberStartInt <= 0) {
-      toast.error('Veuillez entrer un numéro de départ valide.');
-      return;
-    }
-    if (invoiceNumberStartInt <= lastInvoiceNumber) {
-      toast.error(`Le numéro de départ doit être supérieur au dernier numéro de facture émis (${lastInvoiceNumber}).`);
-      return;
-    }
+    const intStart = parseInt(invoiceNumberStart || '0', 10);
     if (
-      invoiceNumberStartInt !== parseInt(previousInvoiceNumberStart, 10) &&
-      !window.confirm("Modifier le numéro de départ des factures peut entraîner des incohérences légales. Voulez-vous continuer ?")
+      intStart !== parseInt(previousInvoiceNumberStart, 10) &&
+      !window.confirm("Changer le numéro de départ peut créer des incohérences légales. Continuer ?")
     ) {
       return;
     }
-
     try {
       const token = localStorage.getItem('token');
-      const config = {
-        headers: { Authorization: `Bearer ${token}` },
-      };
+      const config = { headers: { Authorization: `Bearer ${token}` } };
 
-      // Si l'entreprise n'est pas soumise à la TVA, forcer le taux à 0.
-      const updatedTauxTVA = soumisTVA ? businessInfo.tauxTVA : 0;
+      const realTVA = soumisTVA ? tauxTVA : 0;
 
-      // Préparation de l'objet complet pour BusinessInfo en fusionnant les valeurs actuelles avec les modifications.
-      const updatedBusinessInfo = {
-        name: businessInfo.name || '',
-        address: businessInfo.address || '',
-        postalCode: businessInfo.postalCode || '',
-        city: businessInfo.city || '',
-        phone: businessInfo.phone || '',
-        email: businessInfo.email || '',
-        siret: businessInfo.siret || '',
-        companyType: businessInfo.companyType || '',
+      const updatedInfo = {
         invoiceTitle,
-        invoiceNumberStart: invoiceNumberStartInt,
-        taxeURSSAF: businessInfo.taxeURSSAF || 0.246,
-        tauxTVA: updatedTauxTVA,
+        invoiceNumberStart: intStart,
+        taxeURSSAF,
+        tauxTVA: realTVA,
         features: {
           invoiceStatus: {
             enabled: invoiceStatus.enabled,
-            paymentDelay: invoiceStatus.paymentDelay,
+            paymentDelay: parseInt(invoiceStatus.paymentDelay, 10) || 30,
           },
           automaticReminders: {
             enabled: reminders.enabled,
-            firstReminder: reminders.firstReminder,
-            secondReminder: reminders.secondReminder,
-            thirdReminder: reminders.thirdReminder,
+            firstReminder: parseInt(reminders.firstReminder, 10) || 7,
+            secondReminder: parseInt(reminders.secondReminder, 10) || 15,
+            thirdReminder: parseInt(reminders.thirdReminder, 10) || 30,
           },
         },
-        displayOptions: {
-          ...displayOptions,
-        },
+        displayOptions: { ...displayOptions },
+        legalMessages: { ...legalMessages },
       };
 
-      // Mise à jour via deux endpoints : invoice-settings et business-info
+      // On poste à 2 endpoints : /invoice-settings et /business-info
       await Promise.all([
-        axios.post('/invoice-settings', { invoiceTitle, invoiceNumberStart: invoiceNumberStartInt }, config),
-        axios.post('/business-info', updatedBusinessInfo, config)
+        axios.post('/invoice-settings', { invoiceTitle, invoiceNumberStart: intStart }, config),
+        axios.post('/business-info', updatedInfo, config),
       ]);
 
+      // On refresh le "next invoice number"
       await fetchNextInvoiceNumber();
       setPreviousInvoiceNumberStart(invoiceNumberStart);
-      toast.success('Paramètres mis à jour avec succès');
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour des paramètres', error);
-      toast.error('Erreur lors de la mise à jour des paramètres de facturation.');
+      toast.success('Paramètres enregistrés.');
+    } catch (err) {
+      console.error('Erreur update settings:', err);
+      toast.error('Erreur lors de la mise à jour des paramètres.');
     }
   };
 
+  // -----------------------
+  // Test des rappels
+  // -----------------------
   const handleTestReminders = async () => {
     try {
       const token = localStorage.getItem('token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      toast.info('Lancement du test des rappels...');
+      toast.info('Test rappels en cours...');
       await axios.post('/reminder-service/check-now', {}, config);
-      toast.success('Test des rappels effectué. Vérifiez vos emails et les logs du serveur.');
+      toast.success('Test rappels OK, voir emails/logs.');
     } catch (error) {
-      console.error('Erreur lors du test des rappels:', error);
-      toast.error('Erreur lors du test des rappels.');
+      console.error('Erreur test rappels:', error);
+      toast.error('Erreur test rappels.');
     }
   };
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-lg mb-6">
-      <h2 className="text-xl font-semibold mb-6">Paramètres de Facturation</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Section: Paramètres de base */}
-        <div className="space-y-4">
+  // -----------------------
+  // Rendu par onglet
+  // -----------------------
+  function renderFacturationTab() {
+    return (
+      <div className="space-y-5">
+        <h3 className="text-xl font-semibold">Paramètres de Facturation</h3>
+
+        {/* Numérotation */}
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
           <div>
-            <label className="block text-gray-700">Intitulé de la facture :</label>
+            <label className="block mb-2">Intitulé de la facture :</label>
             <input
               type="text"
               value={invoiceTitle}
               onChange={(e) => setInvoiceTitle(e.target.value)}
-              className="mt-1 w-full p-2 border border-gray-300 rounded"
+              className="w-full p-2.5 bg-blue-900/30 border border-white/20 rounded-md text-white"
+              placeholder="Ex: Prestations mensuelles"
             />
           </div>
           <div>
-            <label className="block text-gray-700">Numéro de départ des factures :</label>
+            <label className="block mb-2">Numéro de départ des factures :</label>
             <input
               type="number"
               value={invoiceNumberStart}
               onChange={(e) => setInvoiceNumberStart(e.target.value)}
-              className="mt-1 w-full p-2 border border-gray-300 rounded"
+              min="1"
+              className={`w-full p-2.5 bg-blue-900/30 border ${errors.invoiceNumberStart ? 'border-red-500' : 'border-white/20'
+                } rounded-md text-white`}
             />
+            {errors.invoiceNumberStart && (
+              <p className="text-xs text-red-400 mt-1">{errors.invoiceNumberStart}</p>
+            )}
           </div>
+          <div className="text-sm text-blue-100">
+            Dernier numéro émis : <strong>{lastInvoiceNumber}</strong>
+          </div>
+        </div>
+
+        {/* TVA / URSSAF */}
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
+          <h4 className="text-white font-medium">TVA & URSSAF</h4>
+          <div className="flex items-center space-x-2">
+            <input
+              id="soumisTVA"
+              type="checkbox"
+              checked={soumisTVA}
+              onChange={(e) => setSoumisTVA(e.target.checked)}
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="soumisTVA">Entreprise soumise à la TVA ?</label>
+          </div>
+          {soumisTVA && (
+            <div>
+              <label className="block mb-2">Taux de TVA (%) :</label>
+              <input
+                type="number"
+                step="0.1"
+                value={(tauxTVA * 100).toFixed(1)}
+                onChange={(e) => setTauxTVA(parseFloat(e.target.value) / 100)}
+                className="w-full p-2.5 bg-blue-900/30 border border-white/20 rounded-md text-white"
+              />
+            </div>
+          )}
+
           <div>
-            <label className="block text-gray-700">Numéro de facture actuel :</label>
+            <label className="block mb-2">Taux URSSAF (%) :</label>
             <input
               type="number"
-              value={currentInvoiceNumber}
-              disabled
-              className="mt-1 w-full p-2 border border-gray-300 rounded bg-gray-100"
+              step="0.1"
+              value={(taxeURSSAF * 100).toFixed(1)}
+              onChange={(e) => setTaxeURSSAF(parseFloat(e.target.value) / 100)}
+              className="w-full p-2.5 bg-blue-900/30 border border-white/20 rounded-md text-white"
             />
-          </div>
-          <div>
-            <p className="text-gray-600">
-              Dernier numéro de facture émis : <strong>{lastInvoiceNumber}</strong>
+            <p className="text-xs text-blue-200 mt-1">
+              Pour calculer le Net = Brut - (Brut × tauxURSSAF).
             </p>
           </div>
         </div>
 
-        {/* Section: Options d'affichage */}
-        <div className="border-t pt-6">
-          <h3 className="text-lg font-medium mb-4">Options d'affichage</h3>
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="showDueDateOnInvoice"
-                checked={displayOptions.showDueDateOnInvoice}
-                onChange={(e) =>
-                  setDisplayOptions((prev) => ({
-                    ...prev,
-                    showDueDateOnInvoice: e.target.checked,
-                  }))
-                }
-                className="h-4 w-4 text-blue-600 rounded border-gray-300"
-              />
-              <label htmlFor="showDueDateOnInvoice" className="ml-2">
-                Afficher la date d'échéance sur les factures
-              </label>
-            </div>
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="showDueDateInHistory"
-                checked={displayOptions.showDueDateInHistory}
-                onChange={(e) =>
-                  setDisplayOptions((prev) => ({
-                    ...prev,
-                    showDueDateInHistory: e.target.checked,
-                  }))
-                }
-                className="h-4 w-4 text-blue-600 rounded border-gray-300"
-              />
-              <label htmlFor="showDueDateInHistory" className="ml-2">
-                Afficher la date d'échéance dans l'historique des factures
-              </label>
-            </div>
-
-            {/* Case pour "Entreprise soumise à la TVA" */}
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="soumisTVA"
-                checked={soumisTVA}
-                onChange={(e) => {
-                  const isChecked = e.target.checked;
-                  setSoumisTVA(isChecked);
-                  if (isChecked) {
-                    // Si l'entreprise est soumise à la TVA, désactiver l'affichage de la mention TVA non applicable.
-                    setDisplayOptions((prev) => ({ ...prev, showTvaComment: false }));
-                  }
-                }}
-                className="h-4 w-4 text-blue-600 rounded border-gray-300"
-              />
-              <label htmlFor="soumisTVA" className="ml-2">
-                Entreprise soumise à la TVA
-              </label>
-            </div>
-
-            {/* Champ de saisie du taux de TVA (affiché si soumisTVA est vrai) */}
-            {soumisTVA && (
-              <div>
-                <label className="block text-gray-700">Taux de TVA (%) :</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={businessInfo.tauxTVA ? (businessInfo.tauxTVA * 100).toFixed(1) : ''}
-                  onChange={(e) =>
-                    setBusinessInfo({
-                      ...businessInfo,
-                      tauxTVA: parseFloat(e.target.value) / 100
-                    })
-                  }
-                  className="mt-1 w-full p-2 border border-gray-300 rounded"
-                />
-              </div>
-            )}
-
-            {/* Si l'entreprise n'est pas soumise à la TVA, l'utilisateur peut choisir d'afficher ou non la mention */}
-            {!soumisTVA && (
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="showTvaComment"
-                  checked={displayOptions.showTvaComment}
-                  onChange={(e) =>
-                    setDisplayOptions((prev) => ({
-                      ...prev,
-                      showTvaComment: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                />
-                <label htmlFor="showTvaComment" className="ml-2">
-                  Afficher la mention <span className="italic">TVA non applicable - art.293B du CGI</span>
-                </label>
-              </div>
-            )}
-
-            {/* Contrôle pour le taux URSSAF */}
+        {/* Délai de paiement */}
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
+            <input
+              id="invStatusEnabled"
+              type="checkbox"
+              checked={invoiceStatus.enabled}
+              onChange={(e) =>
+                setInvoiceStatus((prev) => ({ ...prev, enabled: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="invStatusEnabled" className="text-white">
+              Activer le suivi des paiements
+            </label>
+          </div>
+          {invoiceStatus.enabled && (
             <div>
-              <label className="block text-gray-700">Taux URSSAF (%) :</label>
+              <label className="block mb-2">Délai de paiement (jours) :</label>
               <input
                 type="number"
-                step="0.1"
-                value={businessInfo.taxeURSSAF ? (businessInfo.taxeURSSAF * 100).toFixed(1) : ''}
-                onChange={(e) =>
-                  setBusinessInfo({
-                    ...businessInfo,
-                    taxeURSSAF: parseFloat(e.target.value) / 100
-                  })
-                }
-                className="mt-1 w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section: Suivi des paiements */}
-        <div className="border-t pt-6">
-          <h3 className="text-lg font-medium mb-4">Suivi des paiements</h3>
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="invoiceStatusEnabled"
-                checked={invoiceStatus.enabled}
+                value={invoiceStatus.paymentDelay}
                 onChange={(e) =>
                   setInvoiceStatus((prev) => ({
                     ...prev,
-                    enabled: e.target.checked,
+                    paymentDelay: parseInt(e.target.value, 10),
                   }))
                 }
-                className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                className={`w-full p-2.5 bg-blue-900/30 border ${errors.paymentDelay ? 'border-red-500' : 'border-white/20'
+                  } rounded-md text-white`}
               />
-              <label htmlFor="invoiceStatusEnabled" className="ml-2">
-                Activer le suivi des paiements
-              </label>
+              {errors.paymentDelay && (
+                <p className="text-xs text-red-400 mt-1">{errors.paymentDelay}</p>
+              )}
             </div>
-            {invoiceStatus.enabled && (
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderRemindersTab() {
+    return (
+      <div className="space-y-5">
+        <h3 className="text-xl font-semibold">Rappels automatiques</h3>
+
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
+          <div className="flex items-center space-x-2">
+            <input
+              id="remindersEnabled"
+              type="checkbox"
+              checked={reminders.enabled}
+              onChange={(e) =>
+                setReminders((prev) => ({ ...prev, enabled: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="remindersEnabled">Activer les rappels automatiques</label>
+          </div>
+
+          {reminders.enabled && (
+            <div className="space-y-3 pl-4 border-l-2 border-blue-500/40">
               <div>
-                <label className="block text-gray-700">Délai de paiement (jours) :</label>
+                <label>Premier rappel (jours après échéance) :</label>
                 <input
                   type="number"
-                  value={invoiceStatus.paymentDelay}
+                  value={reminders.firstReminder}
                   onChange={(e) =>
-                    setInvoiceStatus((prev) => ({
+                    setReminders((prev) => ({
                       ...prev,
-                      paymentDelay: parseInt(e.target.value, 10),
+                      firstReminder: parseInt(e.target.value, 10),
                     }))
                   }
-                  min="1"
-                  className="mt-1 w-full p-2 border border-gray-300 rounded"
+                  className={`w-full p-2.5 bg-blue-900/30 border ${errors.firstReminder ? 'border-red-500' : 'border-white/20'
+                    } rounded-md text-white mt-1`}
                 />
+                {errors.firstReminder && (
+                  <p className="text-xs text-red-400">{errors.firstReminder}</p>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+              <div>
+                <label>Deuxième rappel :</label>
+                <input
+                  type="number"
+                  value={reminders.secondReminder}
+                  onChange={(e) =>
+                    setReminders((prev) => ({
+                      ...prev,
+                      secondReminder: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  className={`w-full p-2.5 bg-blue-900/30 border ${errors.secondReminder ? 'border-red-500' : 'border-white/20'
+                    } rounded-md text-white mt-1`}
+                />
+                {errors.secondReminder && (
+                  <p className="text-xs text-red-400">{errors.secondReminder}</p>
+                )}
+              </div>
+              <div>
+                <label>Troisième rappel :</label>
+                <input
+                  type="number"
+                  value={reminders.thirdReminder}
+                  onChange={(e) =>
+                    setReminders((prev) => ({
+                      ...prev,
+                      thirdReminder: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  className={`w-full p-2.5 bg-blue-900/30 border ${errors.thirdReminder ? 'border-red-500' : 'border-white/20'
+                    } rounded-md text-white mt-1`}
+                />
+                {errors.thirdReminder && (
+                  <p className="text-xs text-red-400">{errors.thirdReminder}</p>
+                )}
+              </div>
 
-        {/* Section: Rappels automatiques */}
-        <div className="border-t pt-6">
-          <h3 className="text-lg font-medium mb-4">Rappels automatiques</h3>
-          <div className="space-y-4">
-            <div className="flex items-center">
+              <div className="pt-3">
+                <button
+                  type="button"
+                  onClick={handleTestReminders}
+                  className="px-4 py-2.5 bg-blue-700 hover:bg-blue-600 rounded-md text-white flex items-center space-x-2 transition-colors"
+                >
+                  <ArrowPathIcon className="h-4 w-4" />
+                  <span>Tester les rappels</span>
+                </button>
+                <p className="text-xs text-blue-200 mt-1">
+                  Force l'envoi de rappels sur une facture impayée pour test.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderPdfMessagesTab() {
+    return (
+      <div className="space-y-5">
+        <h3 className="text-xl font-semibold">PDF & Messages</h3>
+
+        {/* Options d'affichage sur le PDF */}
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
+          <h4 className="font-medium">Affichage sur la facture</h4>
+          <div className="flex items-center space-x-2">
+            <input
+              id="showDueDateOnInvoice"
+              type="checkbox"
+              checked={displayOptions.showDueDateOnInvoice}
+              onChange={(e) =>
+                setDisplayOptions((prev) => ({ ...prev, showDueDateOnInvoice: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="showDueDateOnInvoice">Afficher la date d'échéance</label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <input
+              id="showDueDateInHistory"
+              type="checkbox"
+              checked={displayOptions.showDueDateInHistory}
+              onChange={(e) =>
+                setDisplayOptions((prev) => ({ ...prev, showDueDateInHistory: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="showDueDateInHistory">Afficher la date d'échéance dans l'historique</label>
+          </div>
+          {!soumisTVA && (
+            <div className="flex items-center space-x-2">
               <input
+                id="showTvaComment"
                 type="checkbox"
-                id="remindersEnabled"
-                checked={reminders.enabled}
+                checked={displayOptions.showTvaComment}
                 onChange={(e) =>
-                  setReminders((prev) => ({
-                    ...prev,
-                    enabled: e.target.checked,
-                  }))
+                  setDisplayOptions((prev) => ({ ...prev, showTvaComment: e.target.checked }))
                 }
-                className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                className="h-4 w-4 text-blue-500 border-blue-300 rounded"
               />
-              <label htmlFor="remindersEnabled" className="ml-2">
-                Activer les rappels automatiques
+              <label htmlFor="showTvaComment">
+                Afficher la mention "<em>TVA non applicable - art.293B du CGI</em>"
               </label>
             </div>
-            {reminders.enabled && (
-              <div className="space-y-4 pl-6">
-                <div>
-                  <label className="block text-gray-700">
-                    Premier rappel (jours après échéance) :
-                  </label>
-                  <input
-                    type="number"
-                    value={reminders.firstReminder}
-                    onChange={(e) =>
-                      setReminders((prev) => ({
-                        ...prev,
-                        firstReminder: parseInt(e.target.value, 10),
-                      }))
-                    }
-                    min="1"
-                    className="mt-1 w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700">
-                    Deuxième rappel (jours après échéance) :
-                  </label>
-                  <input
-                    type="number"
-                    value={reminders.secondReminder}
-                    onChange={(e) =>
-                      setReminders((prev) => ({
-                        ...prev,
-                        secondReminder: parseInt(e.target.value, 10),
-                      }))
-                    }
-                    min="1"
-                    className="mt-1 w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700">
-                    Troisième rappel (jours après échéance) :
-                  </label>
-                  <input
-                    type="number"
-                    value={reminders.thirdReminder}
-                    onChange={(e) =>
-                      setReminders((prev) => ({
-                        ...prev,
-                        thirdReminder: parseInt(e.target.value, 10),
-                      }))
-                    }
-                    min="1"
-                    className="mt-1 w-full p-2 border border-gray-300 rounded"
-                  />
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={handleTestReminders}
-                    className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600 transition-colors"
-                  >
-                    Tester les rappels maintenant
-                  </button>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Ce bouton modifiera la date d'échéance d'une facture impayée pour tester le système de rappels.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        <button type="submit" className="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors">
-          Enregistrer
-        </button>
-      </form>
+        {/* Messages légaux et commentaires */}
+        <div className="bg-white/10 border border-white/20 p-5 rounded-md space-y-4 shadow-sm backdrop-blur-sm">
+          <h4 className="font-medium">Messages / Mentions légales</h4>
+          {/* Retard de paiement */}
+          <div className="flex items-center space-x-2">
+            <input
+              id="enableLatePaymentComment"
+              type="checkbox"
+              checked={legalMessages.enableLatePaymentComment}
+              onChange={(e) =>
+                setLegalMessages((prev) => ({ ...prev, enableLatePaymentComment: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="enableLatePaymentComment">
+              Ajouter un texte légal en cas de retard de paiement
+            </label>
+          </div>
+          {legalMessages.enableLatePaymentComment && (
+            <div>
+              <label className="block text-sm mb-1">Texte en cas de retard :</label>
+              <textarea
+                rows="2"
+                value={legalMessages.latePaymentText}
+                onChange={(e) =>
+                  setLegalMessages((prev) => ({ ...prev, latePaymentText: e.target.value }))
+                }
+                className="w-full p-2.5 bg-blue-900/30 border border-white/20 rounded-md text-white"
+              />
+            </div>
+          )}
+          {/* Commentaire personnalisé */}
+          <div className="flex items-center space-x-2">
+            <input
+              id="enableCustomComment"
+              type="checkbox"
+              checked={legalMessages.enableCustomComment}
+              onChange={(e) =>
+                setLegalMessages((prev) => ({ ...prev, enableCustomComment: e.target.checked }))
+              }
+              className="h-4 w-4 text-blue-500 border-blue-300 rounded"
+            />
+            <label htmlFor="enableCustomComment">Commentaire personnalisé sur la facture</label>
+          </div>
+          {legalMessages.enableCustomComment && (
+            <div>
+              <label className="block text-sm mb-1">Commentaire :</label>
+              <textarea
+                rows="2"
+                value={legalMessages.customCommentText}
+                onChange={(e) =>
+                  setLegalMessages((prev) => ({ ...prev, customCommentText: e.target.value }))
+                }
+                className="w-full p-2.5 bg-blue-900/30 border border-white/20 rounded-md text-white"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // -----------------------
+  // Rendu principal
+  // -----------------------
+  return (
+    <div className="container mx-auto pt-34 px-6 pb-8">
+      <div className="bg-white/10 border border-white/20 backdrop-blur-sm rounded-md shadow-sm p-6 text-white relative overflow-hidden">
+        {/* Petite vague décorative en haut (comme dans MonEntreprise) */}
+        <div className="absolute top-0 left-0 w-full pointer-events-none">
+          <svg
+            className="block w-full h-12"
+            viewBox="0 0 1200 120"
+            xmlns="http://www.w3.org/2000/svg"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M0,40 C 300,120 900,-40 1200,40 L1200,0 L0,0 Z"
+              fill="rgba(255,255,255,0.05)"
+            />
+          </svg>
+        </div>
+
+        {/* Titre à l'intérieur du panneau */}
+        <h2 className="text-2xl font-bold mb-6 flex items-center relative z-10 text-white">
+          <CogIcon className="h-6 w-6 text-blue-300 mr-2" />
+          Paramètres
+        </h2>
+
+        <div className="flex flex-col md:flex-row gap-6 relative z-10">
+          {/* Navigation gauche */}
+          <div className="md:w-1/4">
+            <div className="bg-white/15 border border-white/20 backdrop-blur-md rounded-md overflow-hidden shadow-md h-full">
+              <nav className="flex flex-col h-full">
+                <button
+                  onClick={() => setActiveTab('facturation')}
+                  className={`px-4 py-3.5 text-left flex items-center space-x-2 transition-colors border-l-4 ${activeTab === 'facturation'
+                    ? 'bg-blue-900/50 border-blue-400'
+                    : 'border-transparent hover:bg-white/5'
+                    }`}
+                >
+                  <CurrencyEuroIcon className="h-5 w-5 text-blue-300" />
+                  <span>Facturation</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('pdfmessages')}
+                  className={`px-4 py-3.5 text-left flex items-center space-x-2 transition-colors border-l-4 ${activeTab === 'pdfmessages'
+                    ? 'bg-blue-900/50 border-blue-400'
+                    : 'border-transparent hover:bg-white/5'
+                    }`}
+                >
+                  <DocumentTextIcon className="h-5 w-5 text-blue-300" />
+                  <span>PDF & Messages</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('reminders')}
+                  className={`px-4 py-3.5 text-left flex items-center space-x-2 transition-colors border-l-4 ${activeTab === 'reminders'
+                    ? 'bg-blue-900/50 border-blue-400'
+                    : 'border-transparent hover:bg-white/5'
+                    }`}
+                >
+                  <BellAlertIcon className="h-5 w-5 text-blue-300" />
+                  <span>Rappels</span>
+                </button>
+
+
+
+              </nav>
+            </div>
+          </div>
+
+          {/* Contenu */}
+          <div className="md:w-3/4">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-6">
+                {activeTab === 'facturation' && renderFacturationTab()}
+                {activeTab === 'reminders' && renderRemindersTab()}
+                {activeTab === 'pdfmessages' && renderPdfMessagesTab()}
+              </div>
+
+              {/* Bouton global de sauvegarde */}
+              <div className="text-right mt-6">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 rounded-md text-white font-semibold shadow-md flex items-center space-x-2 transition-colors ml-auto"
+                >
+                  <CogIcon className="h-5 w-5" />
+                  <span>Enregistrer</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
   );
-};
+}
 
 export default ParametresFacturation;
