@@ -17,7 +17,8 @@ const PrestationList = ({ prestations, onEdit, onDelete }) => {
           <button onClick={() => onEdit(prestation)}>Modifier</button>
           <button onClick={() => onDelete(prestation._id)}>Supprimer</button>
         </li>
-        ))}
+        ))}  
+        
       </ul>
     </div>
   );
